@@ -10,149 +10,31 @@
     
     <!-- Custom CSS -->
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 100%;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-        }
-        
-        .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
-        }
-        
-        .stats-container {
-            display: flex;
-            justify-content: space-around;
-            padding: 20px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #dee2e6;
-        }
-        
-        .stat-card {
-            text-align: center;
-            padding: 15px;
-        }
-        
-        .stat-value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #667eea;
-        }
-        
-        .stat-label {
-            color: #6c757d;
-            margin-top: 5px;
-        }
-        
-        .table-container {
-            padding: 20px;
-        }
-        
-        .filter-container {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        
-        .filter-input {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-            flex: 1;
-            min-width: 200px;
-        }
-        
-        #victims-table {
-            background: white;
-            border: none;
-        }
-        
-        .tabulator-cell {
-            padding: 12px 10px !important;
-        }
-        
-        .tabulator-col-title {
-            font-weight: bold;
-            text-transform: uppercase;
-            font-size: 12px;
-        }
-        
-        .badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
-        .badge-ransomware {
-            background: #dc3545;
-            color: white;
-        }
-        
-        .badge-country {
-            background: #17a2b8;
-            color: white;
-        }
-        
-        .badge-activity {
-            background: #28a745;
-            color: white;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 50px;
-            color: #6c757d;
-        }
-        
-        .error {
-            text-align: center;
-            padding: 50px;
-            color: #dc3545;
-        }
-        /* Top horizontal scrollbar for the table */
-        .top-scroll {
-            overflow-x: auto;
-            overflow-y: hidden;
-            height: 14px;
-            margin-bottom: 10px;
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 6px;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 100%; margin: 0 auto; background: rgba(255, 255, 255, 0.95); border-radius: 15px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
+        .header h1 { font-size: 2.5rem; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2); }
+        .header p { font-size: 1.1rem; opacity: 0.9; }
+        .stats-container { display: flex; justify-content: space-around; padding: 20px; background: #f8f9fa; border-bottom: 1px solid #dee2e6; }
+        .stat-card { text-align: center; padding: 15px; }
+        .stat-value { font-size: 2rem; font-weight: bold; color: #667eea; }
+        .stat-label { color: #6c757d; margin-top: 5px; }
+        .table-container { padding: 20px; }
+        .filter-container { margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .filter-input { padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; flex: 1; min-width: 200px; }
+        .btn { padding: 10px 14px; border: 1px solid #667eea; background: #667eea; color: white; border-radius: 5px; cursor: pointer; flex: 0 0 auto; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        #victims-table { background: white; border: none; }
+        .tabulator-cell { padding: 12px 10px !important; }
+        .tabulator-col-title { font-weight: bold; text-transform: uppercase; font-size: 12px; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+        .badge-ransomware { background: #dc3545; color: white; }
+        .badge-country { background: #17a2b8; color: white; }
+        .badge-activity { background: #28a745; color: white; }
+        .loading { text-align: center; padding: 50px; color: #6c757d; }
+        .error { text-align: center; padding: 50px; color: #dc3545; }
+        .top-scroll { overflow-x: auto; overflow-y: hidden; height: 14px; margin-bottom: 10px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; }
         .top-scroll::-webkit-scrollbar { height: 10px; }
         .top-scroll::-webkit-scrollbar-thumb { background: #c1c9d2; border-radius: 6px; }
         .top-scroll::-webkit-scrollbar-track { background: #eef1f5; }
@@ -180,20 +62,26 @@
                 <div class="stat-value" id="total-groups">0</div>
                 <div class="stat-label">Ransomware Groups</div>
             </div>
-
+            <div class="stat-card">
+                <div class="stat-value" id="unique-site-ids">0</div>
+                <div class="stat-label">Unique Site IDs</div>
+            </div>
         </div>
         
         <div class="table-container">
             <div class="filter-container">
+                <!-- Employees min filter + apply button -->
+                <input type="number" id="filter-employees-min" class="filter-input" placeholder="👥 Min employees" min="0">
+                <button id="apply-employee-filter" class="btn">Apply</button>
+            
                 <input type="text" id="filter-domain" class="filter-input" placeholder="🔍 Search by domain...">
                 <input type="text" id="filter-company" class="filter-input" placeholder="🏢 Search by company...">
                 <input type="text" id="filter-country" class="filter-input" placeholder="🌍 Search by country...">
                 <input type="text" id="filter-group" class="filter-input" placeholder="👥 Search by ransomware group...">
-            </div>
+            </div>    
             
             <div id="loading" class="loading">Loading data...</div>
             <div id="error" class="error" style="display: none;"></div>
-            <!-- Top horizontal scrollbar synced with the Tabulator table -->
             <div id="top-scroll" class="top-scroll" style="display:none;">
                 <div id="top-scroll-spacer"></div>
             </div>
@@ -208,20 +96,31 @@
         // Initialize table variable
         let table;
         let tableData = [];
+
+        // Centralized filter state
+        const filterState = {
+            domain: '',
+            company: '',
+            country: '',
+            group: '',
+            minEmp: null,
+        };
         
         // Formatter functions
         function currencyFormatter(cell) {
             const value = cell.getValue();
-            if (value && !isNaN(value)) {
-                return '$' + new Intl.NumberFormat('en-US').format(value);
+            if (value === 0) return '$0';
+            if (value !== null && value !== undefined && !isNaN(Number(value))) {
+                return '$' + new Intl.NumberFormat('en-US').format(Number(value));
             }
             return '-';
         }
         
         function numberFormatter(cell) {
             const value = cell.getValue();
-            if (value && !isNaN(value)) {
-                return new Intl.NumberFormat('en-US').format(value);
+            if (value === 0) return '0';
+            if (value !== null && value !== undefined && !isNaN(Number(value))) {
+                return new Intl.NumberFormat('en-US').format(Number(value));
             }
             return '-';
         }
@@ -231,13 +130,7 @@
             if (value) {
                 const date = new Date(value);
                 if (!isNaN(date)) {
-                    return date.toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    });
+                    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                 }
             }
             return '-';
@@ -245,77 +138,43 @@
         
         function urlFormatter(cell) {
             const value = cell.getValue();
-            if (value) {
-                return `<a href="https://${value}" target="_blank" style="color: #667eea;">${value}</a>`;
-            }
+            if (value) { return `<a href="https://${value}" target="_blank" style="color: #667eea;">${value}</a>`; }
             return '-';
         }
+        function groupFormatter(cell) { const value = cell.getValue(); return value ? String(value) : '-'; }
+        function countryFormatter(cell) { const value = cell.getValue(); return value ? String(value) : '-'; }
+        function activityFormatter(cell) { const value = cell.getValue(); return value ? String(value) : '-'; }
         
-        function groupFormatter(cell) {
-            const value = cell.getValue();
-            return value ? String(value) : '-';
-        }
-        
-        function countryFormatter(cell) {
-            const value = cell.getValue();
-            return value ? String(value) : '-';
-        }
-        
-        function activityFormatter(cell) {
-            const value = cell.getValue();
-            return value ? String(value) : '-';
-        }
-        
-        // Utility: keep the width of the top scrollbar in sync with the table width
         function syncTopScrollWidth() {
             const spacer = document.getElementById('top-scroll-spacer');
             const tableEl = document.querySelector('#victims-table .tabulator-table');
-            if (spacer && tableEl) {
-                spacer.style.width = tableEl.scrollWidth + 'px';
-            }
+            if (spacer && tableEl) { spacer.style.width = tableEl.scrollWidth + 'px'; }
         }
-
-        // Setup the top horizontal scrollbar and sync with Tabulator's bottom scroll
         function setupTopHorizontalScroll() {
             const topScroll = document.getElementById('top-scroll');
             const holder = document.querySelector('#victims-table .tabulator-tableholder');
             if (!topScroll || !holder) return;
-
             const onTopScroll = () => { holder.scrollLeft = topScroll.scrollLeft; };
             const onHolderScroll = () => { topScroll.scrollLeft = holder.scrollLeft; };
-
             topScroll.addEventListener('scroll', onTopScroll);
             holder.addEventListener('scroll', onHolderScroll);
-
-            // Initial width sync
             syncTopScrollWidth();
             topScroll.style.display = 'block';
-
-            // Keep widths synced on resize and DOM size changes
             if (window.ResizeObserver) {
                 const tableEl = document.querySelector('#victims-table .tabulator-table');
-                if (tableEl) {
-                    new ResizeObserver(syncTopScrollWidth).observe(tableEl);
-                }
+                if (tableEl) { new ResizeObserver(syncTopScrollWidth).observe(tableEl); }
             }
             window.addEventListener('resize', syncTopScrollWidth);
         }
         
-        // Fetch data from API
         async function fetchData() {
             try {
                 const response = await fetch('/api/data');
                 if (!response.ok) throw new Error('Failed to fetch data');
-                
                 tableData = await response.json();
                 document.getElementById('loading').style.display = 'none';
-                
-                // Update statistics
-                updateStatistics(tableData);
-                
-                // Initialize Tabulator
                 initializeTable(tableData);
-                
+                updateStatistics(table.getData());
             } catch (error) {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('error').style.display = 'block';
@@ -324,37 +183,55 @@
         }
         
         function updateStatistics(data) {
-            // Calculate statistics
             const uniqueVictims = new Set(data.map(d => d.url)).size;
             const uniqueCountries = new Set(data.map(d => d.ACCOUNT_COUNTRY).filter(c => c)).size;
             const uniqueGroups = new Set(data.map(d => d.group_name).filter(g => g)).size;
-            const totalRevenue = data.reduce((sum, d) => sum + (d.ACCOUNT_REVENUE_USD || 0), 0);
-            
-            // Update DOM
+            const siteIdSet = new Set();
+            for (const row of data) {
+                const idsStr = row.site_ids;
+                if (idsStr && typeof idsStr === 'string') {
+                    idsStr.split(';').forEach(s => { const t = s.trim(); if (t) siteIdSet.add(t); });
+                }
+            }
             document.getElementById('total-victims').textContent = uniqueVictims;
             document.getElementById('total-countries').textContent = uniqueCountries;
             document.getElementById('total-groups').textContent = uniqueGroups;
-            
+            const siteEl = document.getElementById('unique-site-ids');
+            if (siteEl) siteEl.textContent = siteIdSet.size;
+        }
+
+        function combinedFilter(data, params) {
+            const url = (data.url || '').toLowerCase();
+            const company = (data.ACCOUNT_TRADE_NAME || '').toLowerCase();
+            const country = (data.ACCOUNT_COUNTRY || '').toLowerCase();
+            const group = (data.group_name || '').toLowerCase();
+            if (params.domain && !url.includes(params.domain)) return false;
+            if (params.company && !company.includes(params.company)) return false;
+            if (params.country && !country.includes(params.country)) return false;
+            if (params.group && !group.includes(params.group)) return false;
+            const empRaw = data.ACCOUNT_EMPLOYEES;
+            const emp = (empRaw === null || empRaw === undefined || empRaw === '') ? NaN : Number(empRaw);
+            if (params.minEmp != null && !(emp >= params.minEmp)) return false;
+            return true;
+        }
+
+        function applyFilters() {
+            if (!table) return;
+            table.setFilter(combinedFilter, { ...filterState });
         }
         
         function initializeTable(data) {
             table = new Tabulator("#victims-table", {
                 data: data,
-                layout: "fitData", // was "fitDataFill"; allow horizontal scroll so manual resizing sticks
-                responsiveLayout: false, // was "hide"; do not auto-hide columns so you can scroll to see them
+                layout: "fitData",
+                responsiveLayout: false,
                 pagination: true,
                 paginationSize: 300,
                 paginationCounter: "rows",
                 movableColumns: true,
                 resizableRows: true,
-                initialSort: [
-                    {column: "discovered", dir: "desc"}
-                ],
-                // url,ACCOUNT_ID,ACCOUNT_TRADE_NAME,ACCOUNT_COUNTRY,ACCOUNT_URL,ACCOUNT_EMPLOYEES,ACCOUNT_IT_EMPLOYEES,ACCOUNT_REVENUE_USD,ACCOUNT_ICT_SPENDING,ACCOUNT_IT_STAFF_SPENDING,ACCOUNT_PRI_SIC4_CODE,group_name,discovered,published,website,country,activity,post_url,post_title,updates,possible_domain,victim_url
-                columnDefaults: {
-                    resizable: true,
-                    minWidth: 100,
-                },
+                initialSort: [ { column: "discovered", dir: "desc" } ],
+                columnDefaults: { resizable: true, minWidth: 100 },
                 columns: [
                     {title: "Domain", field: "url", formatter: urlFormatter, headerFilter: false, width: 200},
                     {title: "Account ID", field: "ACCOUNT_ID", headerFilter: false, width: 120},
@@ -373,36 +250,38 @@
                     {title: "Post URL", field: "post_url", formatter: urlFormatter, headerFilter: false, width: 200},
                     {title: "Victim URL", field: "victim_url", formatter: urlFormatter, headerFilter: false, width: 200},
                     {title: "SIC Code", field: "ACCOUNT_PRI_SIC4_CODE", headerFilter: false, width: 120},
-                    
-                    
                 ],
             });
-
-            // When table is ready, wire up the top scrollbar and keep it in sync on changes
             table.on('tableBuilt', setupTopHorizontalScroll);
             table.on('columnResized', syncTopScrollWidth);
             table.on('columnMoved', syncTopScrollWidth);
             table.on('renderComplete', syncTopScrollWidth);
+            table.on('dataFiltered', function(filters, rows) {
+                const filteredData = rows.map(r => r.getData());
+                updateStatistics(filteredData);
+            });
         }
         
-        // Setup filters
-        document.getElementById('filter-domain').addEventListener('keyup', function(e) {
-            table.setFilter("url", "like", e.target.value);
+        // Text filters update immediately
+        document.getElementById('filter-domain').addEventListener('input', e => { filterState.domain = e.target.value.trim().toLowerCase(); applyFilters(); });
+        document.getElementById('filter-company').addEventListener('input', e => { filterState.company = e.target.value.trim().toLowerCase(); applyFilters(); });
+        document.getElementById('filter-country').addEventListener('input', e => { filterState.country = e.target.value.trim().toLowerCase(); applyFilters(); });
+        document.getElementById('filter-group').addEventListener('input', e => { filterState.group = e.target.value.trim().toLowerCase(); applyFilters(); });
+
+        // Employees: apply on button click (and Enter key)
+        const minEmpInput = document.getElementById('filter-employees-min');
+        const applyEmpBtn = document.getElementById('apply-employee-filter');
+        applyEmpBtn.addEventListener('click', () => {
+            const v = minEmpInput.value;
+            filterState.minEmp = v === '' ? null : parseInt(v, 10);
+            applyFilters();
+        });
+        minEmpInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                applyEmpBtn.click();
+            }
         });
         
-        document.getElementById('filter-company').addEventListener('keyup', function(e) {
-            table.setFilter("ACCOUNT_TRADE_NAME", "like", e.target.value);
-        });
-        
-        document.getElementById('filter-country').addEventListener('keyup', function(e) {
-            table.setFilter("ACCOUNT_COUNTRY", "like", e.target.value);
-        });
-        
-        document.getElementById('filter-group').addEventListener('keyup', function(e) {
-            table.setFilter("group_name", "like", e.target.value);
-        });
-        
-        // Load data when page loads
         document.addEventListener('DOMContentLoaded', fetchData);
     </script>
 </body>
