@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ransomware Victims Dashboard</title>
+    
+    <!-- Tabulator CSS -->
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .stats-container {
+            display: flex;
+            justify-content: space-around;
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .stat-card {
+            text-align: center;
+            padding: 15px;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .table-container {
+            padding: 20px;
+        }
+        
+        .filter-container {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        #victims-table {
+            background: white;
+            border: none;
+        }
+        
+        .tabulator-cell {
+            padding: 12px 10px !important;
+        }
+        
+        .tabulator-col-title {
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 12px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .badge-ransomware {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .badge-country {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .badge-activity {
+            background: #28a745;
+            color: white;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #6c757d;
+        }
+        
+        .error {
+            text-align: center;
+            padding: 50px;
+            color: #dc3545;
+        }
+        /* Top horizontal scrollbar for the table */
+        .top-scroll {
+            overflow-x: auto;
+            overflow-y: hidden;
+            height: 14px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+        }
+        .top-scroll::-webkit-scrollbar { height: 10px; }
+        .top-scroll::-webkit-scrollbar-thumb { background: #c1c9d2; border-radius: 6px; }
+        .top-scroll::-webkit-scrollbar-track { background: #eef1f5; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Ransomware Victims Dashboard in SWDB</h1>
+            <p style="background: #fff3cd; color: #856404; border-radius: 8px; padding: 16px; margin-bottom: 12px; font-size: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                <strong>⚠️ Data: </strong> Please note that some domains are associated with multiple account IDs in the Spiceworks database. This may result in duplicate or ambiguous records for the same victim. Interpret the data with caution.
+            </p>
+        </div>
+        
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-value" id="total-victims">0</div>
+                <div class="stat-label">Total Victims</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-countries">0</div>
+                <div class="stat-label">Countries Affected</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-groups">0</div>
+                <div class="stat-label">Ransomware Groups</div>
+            </div>
+
+        </div>
+        
+        <div class="table-container">
+            <div class="filter-container">
+                <input type="text" id="filter-domain" class="filter-input" placeholder="🔍 Search by domain...">
+                <input type="text" id="filter-company" class="filter-input" placeholder="🏢 Search by company...">
+                <input type="text" id="filter-country" class="filter-input" placeholder="🌍 Search by country...">
+                <input type="text" id="filter-group" class="filter-input" placeholder="👥 Search by ransomware group...">
+            </div>
+            
+            <div id="loading" class="loading">Loading data...</div>
+            <div id="error" class="error" style="display: none;"></div>
+            <!-- Top horizontal scrollbar synced with the Tabulator table -->
+            <div id="top-scroll" class="top-scroll" style="display:none;">
+                <div id="top-scroll-spacer"></div>
+            </div>
+            <div id="victims-table"></div>
+        </div>
+    </div>
+    
+    <!-- Tabulator JS -->
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    
+    <script>
+        // Initialize table variable
+        let table;
+        let tableData = [];
+        
+        // Formatter functions
+        function currencyFormatter(cell) {
+            const value = cell.getValue();
+            if (value && !isNaN(value)) {
+                return '$' + new Intl.NumberFormat('en-US').format(value);
+            }
+            return '-';
+        }
+        
+        function numberFormatter(cell) {
+            const value = cell.getValue();
+            if (value && !isNaN(value)) {
+                return new Intl.NumberFormat('en-US').format(value);
+            }
+            return '-';
+        }
+        
+        function dateFormatter(cell) {
+            const value = cell.getValue();
+            if (value) {
+                const date = new Date(value);
+                if (!isNaN(date)) {
+                    return date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+            }
+            return '-';
+        }
+        
+        function urlFormatter(cell) {
+            const value = cell.getValue();
+            if (value) {
+                return `<a href="https://${value}" target="_blank" style="color: #667eea;">${value}</a>`;
+            }
+            return '-';
+        }
+        
+        function groupFormatter(cell) {
+            const value = cell.getValue();
+            return value ? String(value) : '-';
+        }
+        
+        function countryFormatter(cell) {
+            const value = cell.getValue();
+            return value ? String(value) : '-';
+        }
+        
+        function activityFormatter(cell) {
+            const value = cell.getValue();
+            return value ? String(value) : '-';
+        }
+        
+        // Utility: keep the width of the top scrollbar in sync with the table width
+        function syncTopScrollWidth() {
+            const spacer = document.getElementById('top-scroll-spacer');
+            const tableEl = document.querySelector('#victims-table .tabulator-table');
+            if (spacer && tableEl) {
+                spacer.style.width = tableEl.scrollWidth + 'px';
+            }
+        }
+
+        // Setup the top horizontal scrollbar and sync with Tabulator's bottom scroll
+        function setupTopHorizontalScroll() {
+            const topScroll = document.getElementById('top-scroll');
+            const holder = document.querySelector('#victims-table .tabulator-tableholder');
+            if (!topScroll || !holder) return;
+
+            const onTopScroll = () => { holder.scrollLeft = topScroll.scrollLeft; };
+            const onHolderScroll = () => { topScroll.scrollLeft = holder.scrollLeft; };
+
+            topScroll.addEventListener('scroll', onTopScroll);
+            holder.addEventListener('scroll', onHolderScroll);
+
+            // Initial width sync
+            syncTopScrollWidth();
+            topScroll.style.display = 'block';
+
+            // Keep widths synced on resize and DOM size changes
+            if (window.ResizeObserver) {
+                const tableEl = document.querySelector('#victims-table .tabulator-table');
+                if (tableEl) {
+                    new ResizeObserver(syncTopScrollWidth).observe(tableEl);
+                }
+            }
+            window.addEventListener('resize', syncTopScrollWidth);
+        }
+        
+        // Fetch data from API
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/data');
+                if (!response.ok) throw new Error('Failed to fetch data');
+                
+                tableData = await response.json();
+                document.getElementById('loading').style.display = 'none';
+                
+                // Update statistics
+                updateStatistics(tableData);
+                
+                // Initialize Tabulator
+                initializeTable(tableData);
+                
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = 'Error loading data: ' + error.message;
+            }
+        }
+        
+        function updateStatistics(data) {
+            // Calculate statistics
+            const uniqueVictims = new Set(data.map(d => d.url)).size;
+            const uniqueCountries = new Set(data.map(d => d.ACCOUNT_COUNTRY).filter(c => c)).size;
+            const uniqueGroups = new Set(data.map(d => d.group_name).filter(g => g)).size;
+            const totalRevenue = data.reduce((sum, d) => sum + (d.ACCOUNT_REVENUE_USD || 0), 0);
+            
+            // Update DOM
+            document.getElementById('total-victims').textContent = uniqueVictims;
+            document.getElementById('total-countries').textContent = uniqueCountries;
+            document.getElementById('total-groups').textContent = uniqueGroups;
+            
+        }
+        
+        function initializeTable(data) {
+            table = new Tabulator("#victims-table", {
+                data: data,
+                layout: "fitData", // was "fitDataFill"; allow horizontal scroll so manual resizing sticks
+                responsiveLayout: false, // was "hide"; do not auto-hide columns so you can scroll to see them
+                pagination: true,
+                paginationSize: 300,
+                paginationCounter: "rows",
+                movableColumns: true,
+                resizableRows: true,
+                initialSort: [
+                    {column: "discovered", dir: "desc"}
+                ],
+                // url,ACCOUNT_ID,ACCOUNT_TRADE_NAME,ACCOUNT_COUNTRY,ACCOUNT_URL,ACCOUNT_EMPLOYEES,ACCOUNT_IT_EMPLOYEES,ACCOUNT_REVENUE_USD,ACCOUNT_ICT_SPENDING,ACCOUNT_IT_STAFF_SPENDING,ACCOUNT_PRI_SIC4_CODE,group_name,discovered,published,website,country,activity,post_url,post_title,updates,possible_domain,victim_url
+                columnDefaults: {
+                    resizable: true,
+                    minWidth: 100,
+                },
+                columns: [
+                    {title: "Domain", field: "url", formatter: urlFormatter, headerFilter: false, width: 200},
+                    {title: "Account ID", field: "ACCOUNT_ID", headerFilter: false, width: 120},
+                    {title: "Company", field: "ACCOUNT_NAME", headerFilter: false, width: 200},
+                    {title: "Trade Name", field: "ACCOUNT_TRADE_NAME", headerFilter: false, width: 200},
+                    {title: "Country", field: "ACCOUNT_COUNTRY", formatter: countryFormatter, headerFilter: false, width: 120},
+                    {title: "Ransomware Group", field: "group_name", formatter: groupFormatter, headerFilter: false, width: 150},
+                    {title: "Activity", field: "activity", formatter: activityFormatter, headerFilter: false, width: 130},
+                    {title: "Discovered", field: "discovered", formatter: dateFormatter, headerFilter: false, width: 180},
+                    {title: "Published", field: "published", formatter: dateFormatter, headerFilter: false, width: 180},
+                    {title: "Employees", field: "ACCOUNT_EMPLOYEES", formatter: numberFormatter, headerFilter: false, width: 120},
+                    {title: "IT Staff", field: "ACCOUNT_IT_EMPLOYEES", formatter: numberFormatter, headerFilter: false, width: 100},
+                    {title: "Revenue (USD)", field: "ACCOUNT_REVENUE_USD", formatter: currencyFormatter, headerFilter: false, width: 150},
+                    {title: "ICT Spending", field: "ACCOUNT_ICT_SPENDING", formatter: currencyFormatter, headerFilter: false, width: 150},
+                    {title: "Post Title", field: "post_title", headerFilter: false, width: 200},
+                    {title: "Post URL", field: "post_url", formatter: urlFormatter, headerFilter: false, width: 200},
+                    {title: "Victim URL", field: "victim_url", formatter: urlFormatter, headerFilter: false, width: 200},
+                    {title: "SIC Code", field: "ACCOUNT_PRI_SIC4_CODE", headerFilter: false, width: 120},
+                    
+                    
+                ],
+            });
+
+            // When table is ready, wire up the top scrollbar and keep it in sync on changes
+            table.on('tableBuilt', setupTopHorizontalScroll);
+            table.on('columnResized', syncTopScrollWidth);
+            table.on('columnMoved', syncTopScrollWidth);
+            table.on('renderComplete', syncTopScrollWidth);
+        }
+        
+        // Setup filters
+        document.getElementById('filter-domain').addEventListener('keyup', function(e) {
+            table.setFilter("url", "like", e.target.value);
+        });
+        
+        document.getElementById('filter-company').addEventListener('keyup', function(e) {
+            table.setFilter("ACCOUNT_TRADE_NAME", "like", e.target.value);
+        });
+        
+        document.getElementById('filter-country').addEventListener('keyup', function(e) {
+            table.setFilter("ACCOUNT_COUNTRY", "like", e.target.value);
+        });
+        
+        document.getElementById('filter-group').addEventListener('keyup', function(e) {
+            table.setFilter("group_name", "like", e.target.value);
+        });
+        
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', fetchData);
+    </script>
+</body>
+</html>
