@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maryland Incident Dataset</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f3f6fa; }
+    .container { max-width:100%; padding:20px; }
+    .card { background:#fff; border-radius:14px; box-shadow:0 10px 28px rgba(0,0,0,0.08); padding:18px; }
+    h1 { margin:0 0 12px; font-size:1.6rem; }
+    .meta { background:#eef2ff; padding:10px 14px; border-radius:8px; margin:0 0 14px; font-size:0.9rem; color:#1e3a8a; }
+    .filters { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 12px; }
+    .filter-input { padding:10px; border:1px solid #d1d5db; border-radius:6px; min-width:170px; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0; background:#f8f9fa; border:1px solid #e9ecef; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#c1c9d2; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#eef1f5; }
+    .download-bar { margin:6px 0 10px; }
+    .btn { padding:8px 12px; background:#1d4ed8; border:1px solid #1d4ed8; color:#fff; border-radius:6px; cursor:pointer; }
+    .btn:hover { background:#1e40af; }
+    .stats { display:flex; flex-wrap:wrap; gap:14px; margin:0 0 10px; }
+    .stat { background:#f1f5f9; padding:8px 12px; border-radius:8px; font-size:12px; line-height:1.2; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="card">
+      <h1>Maryland Incident Records</h1>
+      <div class="meta">Dataset: <code>maryland.csv</code> — Security / privacy incidents with attributes for actor, sector, motive, and geopolitical classifications.</div>
+      <div class="stats">
+        <div class="stat">Rows<br><strong id="stat-rows">0</strong></div>
+        <div class="stat">Unique Orgs<br><strong id="stat-orgs">0</strong></div>
+        <div class="stat">Unique Actors<br><strong id="stat-actors">0</strong></div>
+        <div class="stat">Years<br><strong id="stat-years">0</strong></div>
+      </div>
+      <div class="filters">
+        <input id="flt-org" class="filter-input" placeholder="Organization" />
+        <input id="flt-actor" class="filter-input" placeholder="Actor" />
+        <input id="flt-year" class="filter-input" placeholder="Year" />
+        <input id="flt-industry" class="filter-input" placeholder="Industry" />
+        <input id="flt-country" class="filter-input" placeholder="Country" />
+        <input id="flt-motive" class="filter-input" placeholder="Motive" />
+        <input id="flt-event-type" class="filter-input" placeholder="Event Type" />
+      </div>
+      <div class="download-bar">
+        <button id="download-maryland-csv" class="btn" type="button">Download CSV</button>
+      </div>
+      <div id="top-scroll" class="top-scroll" style="display:none;">
+        <div id="top-scroll-spacer"></div>
+      </div>
+      <div id="maryland-table"></div>
+    </div>
+    <div style="text-align:center; padding:10px 0; color:#6b7280; font-size:12px;">Data source: data/maryland.csv</div>
+  </div>
+
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let rawData=[];
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#maryland-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#maryland-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#maryland-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+    function buildTable(data){ const columns=[]; if(data && data.length){ const sample=data[0]; Object.keys(sample).forEach(k=>{ columns.push({ title:k, field:k, width:160 }); }); }
+      table=new Tabulator('#maryland-table',{ data, layout:'fitData', pagination:true, paginationSize:400, movableColumns:true, columnDefaults:{resizable:true,minWidth:140}, initialSort:[{column:'year',dir:'desc'}], columns });
+      table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); });
+      table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData())));
+      table.on('columnResized',syncTopScrollWidth); table.on('columnMoved',syncTopScrollWidth); table.on('renderComplete',syncTopScrollWidth);
+      attachFilters();
+    }
+    function updateStats(data){ document.getElementById('stat-rows').textContent=data.length; document.getElementById('stat-orgs').textContent=new Set(data.map(r=>r.organization).filter(Boolean)).size; document.getElementById('stat-actors').textContent=new Set(data.map(r=>r.actor).filter(Boolean)).size; document.getElementById('stat-years').textContent=new Set(data.map(r=>r.year).filter(Boolean)).size; }
+  function attachFilters(){ const ids=['flt-org','flt-actor','flt-year','flt-industry','flt-country','flt-motive','flt-event-type']; ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('input',applyFilters); }); document.getElementById('download-maryland-csv').addEventListener('click',()=>{ const visibleCols=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean); table.download('csv','maryland_incidents.csv',{columns:visibleCols,rowRange:'active'}); }); }
+  function applyFilters(){ const org=document.getElementById('flt-org').value.trim().toLowerCase(); const actor=document.getElementById('flt-actor').value.trim().toLowerCase(); const year=document.getElementById('flt-year').value.trim(); const industry=document.getElementById('flt-industry').value.trim().toLowerCase(); const country=document.getElementById('flt-country').value.trim().toLowerCase(); const motive=document.getElementById('flt-motive').value.trim().toLowerCase(); const eventType=document.getElementById('flt-event-type').value.trim().toLowerCase(); table.setFilter((row)=>{ if(org && !(String(row.organization||'').toLowerCase().includes(org))) return false; if(actor && !(String(row.actor||'').toLowerCase().includes(actor))) return false; if(year && String(row.year||'')!==year) return false; if(industry && !(String(row.industry||'').toLowerCase().includes(industry))) return false; if(country && !(String(row.country||'').toLowerCase().includes(country))) return false; if(motive && !(String(row.motive||'').toLowerCase().includes(motive))) return false; if(eventType && !(String(row.event_type||'').toLowerCase().includes(eventType))) return false; return true; }); }
+    async function init(){ const res=await fetch('/api/maryland'); const data=await res.json(); if(data.error){ document.getElementById('maryland-table').innerHTML='<div style="color:#dc2626; padding:18px;">'+data.error+'</div>'; return; } rawData=data; buildTable(data); }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

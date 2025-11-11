@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ransomware Grained Dataset</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; font-family: var(--font-stack); background: var(--bg-gradient); }
+    .container { max-width:100%; padding:18px 20px 60px; }
+    .panel { background:#ffffffeb; border-radius:18px; padding:22px 28px 34px; box-shadow:var(--shadow-lg); backdrop-filter:blur(4px); }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 16px; }
+    .filter-input { padding:8px 10px; border:1px solid var(--color-border); border-radius:8px; min-width:180px; font-size:13px; }
+    .btn { padding:8px 12px; border:1px solid var(--color-primary); background:var(--color-primary); color:#fff; border-radius:8px; cursor:pointer; font-size:13px; }
+    .btn-alt { background:#64748b; border-color:#64748b; }
+    .stats { display:flex; flex-wrap:wrap; gap:12px; margin:4px 0 18px; }
+    .stat { background:#f1f5f9; padding:8px 12px; border-radius:10px; font-size:12px; line-height:1.25; min-width:140px; box-shadow:var(--shadow-sm); }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar { height:8px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .col-picker { margin:0 0 12px; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="panel">
+      <h1 style="margin:0 0 12px; font-size:1.8rem;">Ransomware Grained Dataset</h1>
+      <div class="stats" id="stats-bar">
+        <div class="stat">Records<br><strong id="stat-records">0</strong></div>
+        <div class="stat">Victims<br><strong id="stat-victims">0</strong></div>
+        <div class="stat">Sectors<br><strong id="stat-sectors">0</strong></div>
+        <div class="stat">Attackers<br><strong id="stat-attackers">0</strong></div>
+        <div class="stat">Payment Outcomes<br><strong id="stat-payout">0</strong></div>
+      </div>
+      <div class="filters">
+        <input id="flt-victim" class="filter-input" placeholder="Victim" />
+        <input id="flt-sector" class="filter-input" placeholder="Sector" />
+        <input id="flt-attacker" class="filter-input" placeholder="Attacker" />
+        <input id="flt-payment" class="filter-input" placeholder="Payment outcome" />
+        <input id="flt-year" class="filter-input" placeholder="Year (YYYY)" />
+        <button id="btn-reset" class="btn-alt btn" type="button">Reset</button>
+        <button id="btn-export" class="btn" type="button">Download CSV</button>
+      </div>
+      <div class="col-picker">
+        <details class="column-picker">
+          <summary style="cursor:pointer; padding:8px 12px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px;">Columns</summary>
+          <div id="col-box" style="border:1px solid #cbd5e1; border-radius:8px; padding:10px; margin-top:8px; max-height:240px; overflow:auto; background:#fff;"></div>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button id="btn-show-all" class="btn-alt btn" type="button">Show All</button>
+            <button id="btn-hide-all" class="btn-alt btn" type="button">Hide All</button>
+          </div>
+        </details>
+      </div>
+      <div id="top-scroll" class="top-scroll" style="display:none;">
+        <div id="top-scroll-spacer"></div>
+      </div>
+      <div id="grained-table"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let fullData=[]; let columnMeta=[];
+
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#grained-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#grained-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#grained-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+
+    function updateStats(data){
+      document.getElementById('stat-records').textContent=data.length;
+      document.getElementById('stat-victims').textContent=new Set(data.map(r=>r.victim).filter(Boolean)).size;
+      document.getElementById('stat-sectors').textContent=new Set(data.map(r=>r.sector).filter(Boolean)).size;
+      document.getElementById('stat-attackers').textContent=new Set(data.map(r=>String(r.attacker)).filter(a=>a && a!=='[]')).size;
+      document.getElementById('stat-payout').textContent=new Set(data.map(r=>r.payment_outcome).filter(Boolean)).size;
+    }
+
+    function buildColumnPicker(){ const box=document.getElementById('col-box'); if(!box||!table) return; box.innerHTML=''; table.getColumns().forEach(col=>{ const f=col.getField&&col.getField(); if(!f) return; const label=document.createElement('label'); label.style.display='flex'; label.style.alignItems='center'; label.style.gap='6px'; label.style.fontSize='12px'; label.style.margin='4px 0'; const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=col.isVisible(); cb.addEventListener('change',()=>{ cb.checked?col.show():col.hide(); setTimeout(syncTopScrollWidth,0); }); const span=document.createElement('span'); span.textContent=f; label.appendChild(cb); label.appendChild(span); box.appendChild(label); }); }
+
+    function attachColumnPickerButtons(){ document.getElementById('btn-show-all').addEventListener('click',()=>{ table.getColumns().forEach(c=>c.show()); buildColumnPicker(); setTimeout(syncTopScrollWidth,0); }); document.getElementById('btn-hide-all').addEventListener('click',()=>{ table.getColumns().forEach(c=>{ if(c.getField()==='uuid'||c.getField()==='victim') c.show(); else c.hide(); }); buildColumnPicker(); setTimeout(syncTopScrollWidth,0); }); }
+
+    function buildTable(cols,data){
+      // Define columns with initial visibility flag to avoid many hide() calls post-build (faster)
+      const tabCols=cols.map((c,i)=>({
+        title:c.replace(/_/g,' '),
+        field:c,
+        width: c.length>24? 240: (c.length>18?200:140),
+        visible: i < 20 // only first 20 visible initially for speed
+      }));
+      table=new Tabulator('#grained-table',{
+        data,
+        layout:'fitData',
+        pagination:true,
+        paginationSize:300,
+        movableColumns:true,
+        initialSort:[{column:'incident_date', dir:'desc'}],
+        columnDefaults:{resizable:true,minWidth:120},
+        // Enable virtual DOM rendering for speed if many rows
+        virtualDom:true,
+        columns: tabCols,
+      });
+      table.on('tableBuilt',()=>{ setupTopScroll(); buildColumnPicker(); attachColumnPickerButtons(); updateStats(table.getData()); });
+      table.on('dataFiltered',(filters,rows)=> updateStats(rows.map(r=>r.getData())));
+      table.on('columnResized',syncTopScrollWidth);
+      table.on('columnMoved',syncTopScrollWidth);
+      table.on('renderComplete',syncTopScrollWidth);
+    }
+
+    function applyFilters(){
+      const victim=document.getElementById('flt-victim').value.trim().toLowerCase();
+      const sector=document.getElementById('flt-sector').value.trim().toLowerCase();
+      const attacker=document.getElementById('flt-attacker').value.trim().toLowerCase();
+      const payment=document.getElementById('flt-payment').value.trim().toLowerCase();
+      const year=document.getElementById('flt-year').value.trim();
+      table.setFilter((row)=>{
+        if(victim && !(String(row.victim||'').toLowerCase().includes(victim))) return false;
+        if(sector && !(String(row.sector||'').toLowerCase().includes(sector))) return false;
+        if(attacker && !(String(row.attacker||'').toLowerCase().includes(attacker))) return false;
+        if(payment && !(String(row.payment_outcome||'').toLowerCase().includes(payment))) return false;
+    if(year){ const dt=String(row['incident_date']||''); if(!dt.startsWith(year)) return false; }
+        return true;
+      });
+    }
+
+    function attachFilterHandlers(){ ['flt-victim','flt-sector','flt-attacker','flt-payment','flt-year'].forEach(id=> document.getElementById(id).addEventListener('input', applyFilters)); document.getElementById('btn-reset').addEventListener('click',()=>{ ['flt-victim','flt-sector','flt-attacker','flt-payment','flt-year'].forEach(id=>document.getElementById(id).value=''); table.clearFilter(); updateStats(table.getData()); }); document.getElementById('btn-export').addEventListener('click',()=>{ const visibleCols=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean); table.download('csv','ransom_grained_filtered.csv',{columns:visibleCols,rowRange:'active'}); }); }
+
+    async function init(){
+      const res=await fetch('/api/ransom_grained');
+      const json=await res.json();
+      if(json.error){ document.getElementById('grained-table').innerHTML='<div style="color:#dc2626; padding:18px;">'+json.error+'</div>'; return; }
+      fullData=json.data; columnMeta=json.columns; buildTable(json.columns, json.data); attachFilterHandlers();
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

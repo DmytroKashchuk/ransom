@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recent 8-K Filings</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:#1e293b; }
+    .container { max-width:100%; padding:18px 20px 60px; }
+    .panel { background:#fff; border-radius:16px; padding:20px 24px 30px; box-shadow:0 12px 32px -8px rgba(0,0,0,0.25); }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
+    .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; min-width:180px; font-size:14px; }
+    .btn { padding:10px 14px; border:1px solid #6366f1; background:#6366f1; color:#fff; border-radius:8px; cursor:pointer; }
+    .btn-alt { background:#64748b; border-color:#64748b; }
+    .stats { display:flex; flex-wrap:wrap; gap:14px; margin:4px 0 18px; }
+    .stat { background:#f1f5f9; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.3; min-width:150px; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#f1f5f9; }
+    .tabulator-col-title { font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.5px; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="panel">
+      <h1 style="margin:0 0 12px; font-size:1.8rem;">Recent 8-K Filings</h1>
+      <div class="stats" id="stats-bar">
+        <div class="stat">Filings<br><strong id="stat-filings">0</strong></div>
+        <div class="stat">Unique CIKs<br><strong id="stat-ciks">0</strong></div>
+        <div class="stat">Companies<br><strong id="stat-companies">0</strong></div>
+        <div class="stat">With Item 1.05<br><strong id="stat-item105">0</strong></div>
+        <div class="stat">With Item 8.01<br><strong id="stat-item801">0</strong></div>
+      </div>
+      <div class="filters">
+        <input id="flt-company" class="filter-input" placeholder="Company" />
+        <input id="flt-ticker" class="filter-input" placeholder="Ticker" />
+        <input id="flt-cik" class="filter-input" placeholder="CIK" />
+        <input id="flt-date" class="filter-input" type="date" placeholder="File Date" />
+        <input id="flt-item105" class="filter-input" placeholder="Item 1.05 (True/False)" />
+        <input id="flt-item801" class="filter-input" placeholder="Item 8.01 (True/False)" />
+        <button id="btn-reset" class="btn-alt btn" type="button">Reset</button>
+        <button id="btn-export" class="btn" type="button">Download CSV</button>
+      </div>
+      <div id="top-scroll" class="top-scroll" style="display:none;">
+        <div id="top-scroll-spacer"></div>
+      </div>
+      <div id="eightk-table"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let rawData=[];
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const tableEl=document.querySelector('#eightk-table .tabulator-table'); if(spacer&&tableEl) spacer.style.width=tableEl.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#eightk-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#eightk-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+    function updateStats(data){ document.getElementById('stat-filings').textContent=data.length; document.getElementById('stat-ciks').textContent=new Set(data.map(r=>r.cik).filter(Boolean)).size; document.getElementById('stat-companies').textContent=new Set(data.map(r=>r.company).filter(Boolean)).size; const item105=data.filter(r=>String(r.item105).toLowerCase()==='true').length; const item801=data.filter(r=>String(r.item801).toLowerCase()==='true').length; document.getElementById('stat-item105').textContent=item105; document.getElementById('stat-item801').textContent=item801; }
+    function buildTable(data){ table=new Tabulator('#eightk-table',{ data, layout:'fitData', pagination:true, paginationSize:300, movableColumns:true, initialSort:[{column:'file_date',dir:'desc'}], columnDefaults:{resizable:true,minWidth:140}, columns:[ {title:'Company',field:'company',width:260}, {title:'Ticker(s)',field:'stockticker',width:160}, {title:'Form',field:'form',width:90}, {title:'File Date',field:'file_date',width:140}, {title:'CIK',field:'cik',width:140}, {title:'ADSH',field:'adsh',width:200}, {title:'SEC Link',field:'link',width:340, formatter:(cell)=>{const v=cell.getValue(); if(!v) return '-'; return `<a href="${v}" target="_blank" style="color:#6366f1;">link</a>`;}}, {title:'Display Name',field:'display_name',width:360}, {title:'Item 1.05',field:'item105',width:110}, {title:'Item 8.01',field:'item801',width:110}, ], }); table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); }); table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData()))); table.on('columnResized',syncTopScrollWidth); table.on('columnMoved',syncTopScrollWidth); table.on('renderComplete',syncTopScrollWidth); }
+    function applyFilters(){ const company=document.getElementById('flt-company').value.trim().toLowerCase(); const ticker=document.getElementById('flt-ticker').value.trim().toLowerCase(); const cik=document.getElementById('flt-cik').value.trim(); const date=document.getElementById('flt-date').value.trim(); const item105=document.getElementById('flt-item105').value.trim().toLowerCase(); const item801=document.getElementById('flt-item801').value.trim().toLowerCase(); table.setFilter((row)=>{ if(company && !(String(row.company||'').toLowerCase().includes(company))) return false; if(ticker && !(String(row.stockticker||'').toLowerCase().includes(ticker))) return false; if(cik && String(row.cik||'')!==cik) return false; if(date && String(row.file_date||'')!==date) return false; if(item105 && String(row.item105||'').toLowerCase()!==item105) return false; if(item801 && String(row.item801||'').toLowerCase()!==item801) return false; return true; }); }
+    function attachFilterHandlers(){ ['flt-company','flt-ticker','flt-cik','flt-date','flt-item105','flt-item801'].forEach(id=>{ document.getElementById(id).addEventListener('input',applyFilters); if(id==='flt-date') document.getElementById(id).addEventListener('change',applyFilters); }); document.getElementById('btn-reset').addEventListener('click',()=>{ ['flt-company','flt-ticker','flt-cik','flt-date','flt-item105','flt-item801'].forEach(id=>document.getElementById(id).value=''); table.clearFilter(); updateStats(table.getData()); }); document.getElementById('btn-export').addEventListener('click',()=>{ const visibleCols=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean); table.download('csv','8k_filings.csv',{columns:visibleCols,rowRange:'active'}); }); }
+    async function init(){ const res=await fetch('/api/eightk'); const data=await res.json(); if(data.error){ const container=document.getElementById('eightk-table'); container.innerHTML='<div style="color:#dc2626; padding:18px;">'+data.error+'</div>'; return; } rawData=data; buildTable(data); attachFilterHandlers(); }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

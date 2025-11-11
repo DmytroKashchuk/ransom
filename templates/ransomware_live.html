@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ransomware.live Feed</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body {
+      margin: 0;
+      background: #1e293b;
+    }
+
+    .container {
+      max-width: 100%;
+      padding: 18px 20px 60px;
+    }
+
+    .panel {
+      background: #fff;
+      border-radius: 16px;
+      padding: 20px 24px 30px;
+      box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.25);
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .filter-input {
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      min-width: 200px;
+      font-size: 14px;
+    }
+
+    .btn {
+      padding: 10px 14px;
+      border: 1px solid #6366f1;
+      background: #6366f1;
+      color: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .btn-alt {
+      background: #64748b;
+      border-color: #64748b;
+    }
+
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin: 4px 0 18px;
+    }
+
+    .stat {
+      background: #f1f5f9;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.3;
+      min-width: 150px;
+    }
+
+    .top-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+      height: 14px;
+      margin: 8px 0 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+    }
+
+    .top-scroll::-webkit-scrollbar {
+      height: 10px;
+    }
+
+    .top-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 6px;
+    }
+
+    .top-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+  </style>
+</head>
+
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="panel">
+      <h1 style="margin:0 0 12px; font-size:1.8rem;">Ransomware.live Feed</h1>
+      <div class="stats" id="stats-bar">
+        <div class="stat">Posts<br><strong id="stat-posts">0</strong></div>
+        <div class="stat">Groups<br><strong id="stat-groups">0</strong></div>
+        <div class="stat">Countries<br><strong id="stat-countries">0</strong></div>
+        <div class="stat">Activities<br><strong id="stat-activities">0</strong></div>
+        <div class="stat">Date Range<br><strong id="stat-range">-</strong></div>
+      </div>
+      <div class="filters">
+        <input id="flt-title" class="filter-input" placeholder="Post title" />
+        <input id="flt-group" class="filter-input" placeholder="Group" />
+        <input id="flt-country" class="filter-input" placeholder="Country" />
+        <input id="flt-activity" class="filter-input" placeholder="Activity" />
+        <input id="flt-website" class="filter-input" placeholder="Website" />
+        <input id="flt-date-from" type="date" class="filter-input" />
+        <input id="flt-date-to" type="date" class="filter-input" />
+        <button id="btn-reset" class="btn-alt btn" type="button">Reset</button>
+        <button id="btn-export" class="btn" type="button">Download CSV</button>
+      </div>
+      <div id="top-scroll" class="top-scroll" style="display:none;">
+        <div id="top-scroll-spacer"></div>
+      </div>
+      <div id="rw-table"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let fullData = [];
+    function syncTopScrollWidth() { const spacer = document.getElementById('top-scroll-spacer'); const el = document.querySelector('#rw-table .tabulator-table'); if (spacer && el) spacer.style.width = el.scrollWidth + 'px'; }
+    function setupTopScroll() { const top = document.getElementById('top-scroll'); const holder = document.querySelector('#rw-table .tabulator-tableholder'); if (!top || !holder) return; top.addEventListener('scroll', () => holder.scrollLeft = top.scrollLeft); holder.addEventListener('scroll', () => top.scrollLeft = holder.scrollLeft); syncTopScrollWidth(); top.style.display = 'block'; if (window.ResizeObserver) { const el = document.querySelector('#rw-table .tabulator-table'); if (el) new ResizeObserver(syncTopScrollWidth).observe(el); } window.addEventListener('resize', syncTopScrollWidth); }
+    function parseDate(val) { if (!val) return null; const d = new Date(val); return isNaN(d) ? null : d; }
+    function updateStats(data) { document.getElementById('stat-posts').textContent = data.length; document.getElementById('stat-groups').textContent = new Set(data.map(r => r.group_name).filter(Boolean)).size; document.getElementById('stat-countries').textContent = new Set(data.map(r => r.country).filter(Boolean)).size; document.getElementById('stat-activities').textContent = new Set(data.map(r => r.activity).filter(Boolean)).size; if (data.length) { const dates = data.map(r => parseDate(r.discovered)).filter(Boolean).sort((a, b) => a - b); if (dates.length) { const fmt = d => d.toISOString().split('T')[0]; document.getElementById('stat-range').textContent = fmt(dates[0]) + ' → ' + fmt(dates[dates.length - 1]); } else document.getElementById('stat-range').textContent = '-'; } else document.getElementById('stat-range').textContent = '-'; }
+    function buildTable(data) { table = new Tabulator('#rw-table', { data, layout: 'fitData', pagination: true, paginationSize: 300, movableColumns: true, initialSort: [{ column: 'discovered', dir: 'desc' }], columnDefaults: { resizable: true, minWidth: 140 }, columns: [{ title: 'Post Title', field: 'post_title', width: 260 }, { title: 'Group', field: 'group_name', width: 140 }, { title: 'Discovered', field: 'discovered', width: 180 }, { title: 'Description', field: 'description', width: 320 }, { title: 'Published', field: 'published', width: 180 }, { title: 'Post URL', field: 'post_url', width: 300, formatter: (cell) => { const v = cell.getValue(); if (!v) return '-'; return `<a href="${v}" target="_blank" style="color:#6366f1;">link</a>`; } }, { title: 'Country', field: 'country', width: 120 }, { title: 'Activity', field: 'activity', width: 140 }, { title: 'Website', field: 'website', width: 220, formatter: (cell) => { const v = cell.getValue(); if (!v) return '-'; return `<a href="https://${v}" target="_blank" style="color:#6366f1;">${v}</a>`; } }, { title: 'Duplicates', field: 'duplicates', width: 140 },], }); table.on('tableBuilt', () => { setupTopScroll(); updateStats(table.getData()); }); table.on('dataFiltered', (_, rows) => updateStats(rows.map(r => r.getData()))); table.on('columnResized', syncTopScrollWidth); table.on('columnMoved', syncTopScrollWidth); table.on('renderComplete', syncTopScrollWidth); }
+    function applyFilters() { const title = document.getElementById('flt-title').value.trim().toLowerCase(); const group = document.getElementById('flt-group').value.trim().toLowerCase(); const country = document.getElementById('flt-country').value.trim().toLowerCase(); const activity = document.getElementById('flt-activity').value.trim().toLowerCase(); const website = document.getElementById('flt-website').value.trim().toLowerCase(); const fromVal = document.getElementById('flt-date-from').value; const toVal = document.getElementById('flt-date-to').value; const fromDate = fromVal ? new Date(fromVal) : null; const toDate = toVal ? new Date(toVal) : null; if (toDate) toDate.setHours(23, 59, 59, 999); table.setFilter((row) => { const d = row.discovered; const dDate = parseDate(d); if (title && !(String(row.post_title || '').toLowerCase().includes(title))) return false; if (group && !(String(row.group_name || '').toLowerCase().includes(group))) return false; if (country && !(String(row.country || '').toLowerCase().includes(country))) return false; if (activity && !(String(row.activity || '').toLowerCase().includes(activity))) return false; if (website && !(String(row.website || '').toLowerCase().includes(website))) return false; if (fromDate && (!dDate || dDate < fromDate)) return false; if (toDate && (!dDate || dDate > toDate)) return false; return true; }); }
+    function attachFilterHandlers() { ['flt-title', 'flt-group', 'flt-country', 'flt-activity', 'flt-website', 'flt-date-from', 'flt-date-to'].forEach(id => { document.getElementById(id).addEventListener('input', applyFilters); if (id.startsWith('flt-date')) document.getElementById(id).addEventListener('change', applyFilters); }); document.getElementById('btn-reset').addEventListener('click', () => { ['flt-title', 'flt-group', 'flt-country', 'flt-activity', 'flt-website', 'flt-date-from', 'flt-date-to'].forEach(id => document.getElementById(id).value = ''); table.clearFilter(); updateStats(table.getData()); }); document.getElementById('btn-export').addEventListener('click', () => { const visibleCols = table.getColumns().filter(c => c.isVisible && c.isVisible()).map(c => c.getField()).filter(Boolean); table.download('csv', 'ransomware_live_filtered.csv', { columns: visibleCols, rowRange: 'active' }); }); }
+    async function init() { const res = await fetch('/api/ransomware_live'); const data = await res.json(); if (data.error) { const container = document.getElementById('rw-table'); container.innerHTML = '<div style="color:#dc2626; padding:18px;">' + data.error + '</div>'; return; } fullData = data; buildTable(data); attachFilterHandlers(); }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SWDB Unique Domains</title>
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+    <link href="/static/css/main.css" rel="stylesheet" />
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f1f5f9; }
+        .container { max-width: 100%; padding: 20px; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); padding: 16px; }
+        .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+        .filter-input { padding: 10px; border: 1px solid #ddd; border-radius: 6px; min-width: 200px; }
+        .top-scroll { overflow-x: auto; overflow-y: hidden; height: 14px; margin: 8px 0; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; }
+        .top-scroll::-webkit-scrollbar { height: 10px; }
+        .top-scroll::-webkit-scrollbar-thumb { background: #c1c9d2; border-radius: 6px; }
+        .top-scroll::-webkit-scrollbar-track { background: #eef1f5; }
+        .footer { text-align: center; padding: 10px 0; color: #6b7280; font-size: 12px; }
+        .stat-bar { display:flex; gap:20px; flex-wrap:wrap; margin: 0 0 14px; }
+        .stat { background:#eef2ff; padding:10px 14px; border-radius:8px; font-size:14px; }
+        .btn { padding: 8px 12px; background:#64748b; border:1px solid #64748b; color:#fff; border-radius:6px; cursor:pointer; }
+        .btn:disabled { opacity:0.6; cursor:not-allowed; }
+    </style>
+</head>
+<body>
+    {% include 'navbar.html' %}
+
+    <div class="container">
+        <div class="card">
+            <div class="stat-bar">
+                <div class="stat">Total Rows: <span id="stat-total">0</span></div>
+                <div class="stat">Unique SITE_URL: <span id="stat-site-urls">0</span></div>
+            </div>
+            <div class="filters">
+                <input id="flt-site-url" class="filter-input" placeholder="Filter by SITE_URL" />
+            </div>
+            <div style="margin:6px 0 10px;">
+                <button id="download-unique-csv" class="btn">Download CSV</button>
+            </div>
+            <div id="top-scroll" class="top-scroll" style="display:none;">
+                <div id="top-scroll-spacer"></div>
+            </div>
+            <div id="unique-table"></div>
+        </div>
+        <div class="footer">Data source: domains_swdb_unique.csv</div>
+    </div>
+
+    <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    <script>
+        let table;
+
+        function syncTopScrollWidth() {
+            const spacer = document.getElementById('top-scroll-spacer');
+            const tableEl = document.querySelector('#unique-table .tabulator-table');
+            if (spacer && tableEl) spacer.style.width = tableEl.scrollWidth + 'px';
+        }
+        function setupTopHorizontalScroll() {
+            const topScroll = document.getElementById('top-scroll');
+            const holder = document.querySelector('#unique-table .tabulator-tableholder');
+            if (!topScroll || !holder) return;
+            topScroll.addEventListener('scroll', () => { holder.scrollLeft = topScroll.scrollLeft; });
+            holder.addEventListener('scroll', () => { topScroll.scrollLeft = holder.scrollLeft; });
+            syncTopScrollWidth();
+            topScroll.style.display = 'block';
+            if (window.ResizeObserver) {
+                const tableEl = document.querySelector('#unique-table .tabulator-table');
+                if (tableEl) new ResizeObserver(syncTopScrollWidth).observe(tableEl);
+            }
+            window.addEventListener('resize', syncTopScrollWidth);
+        }
+
+        function updateStats(data) {
+            document.getElementById('stat-total').textContent = data.length;
+            const uniqueSite = new Set(data.map(r => r.SITE_URL).filter(Boolean));
+            document.getElementById('stat-site-urls').textContent = uniqueSite.size;
+        }
+
+        async function loadData() {
+            const res = await fetch('/api/swdb_unique');
+            const data = await res.json();
+
+            table = new Tabulator('#unique-table', {
+                data,
+                layout: 'fitData',
+                responsiveLayout: false,
+                pagination: true,
+                paginationSize: 500,
+                paginationCounter: 'rows',
+                movableColumns: true,
+                resizableRows: true,
+                initialSort: [ { column: 'SITE_URL', dir: 'asc' } ],
+                columnDefaults: { resizable: true, minWidth: 140 },
+                columns: [
+                    { title: 'SITE_URL', field: 'SITE_URL', width: 260 },
+                    { title: 'num_site_ids', field: 'num_site_ids', width: 140 },
+                    { title: 'num_account_ids', field: 'num_account_ids', width: 160 },
+                    { title: 'account_ids', field: 'account_ids', width: 300 },
+                    { title: 'site_ids', field: 'site_ids', width: 340 },
+                ],
+            });
+
+            table.on('tableBuilt', () => { setupTopHorizontalScroll(); updateStats(table.getData()); });
+            table.on('dataFiltered', (filters, rows) => { updateStats(rows.map(r => r.getData())); });
+            table.on('columnResized', syncTopScrollWidth);
+            table.on('columnMoved', syncTopScrollWidth);
+            table.on('renderComplete', syncTopScrollWidth);
+
+            document.getElementById('flt-site-url').addEventListener('input', (e) => table.setFilter('SITE_URL', 'like', e.target.value));
+            document.getElementById('download-unique-csv').addEventListener('click', () => {
+                if (!table) return;
+                table.download('csv', 'swdb_unique_domains.csv', { rowRange: 'active' });
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>

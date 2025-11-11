@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>company_presence_matrix</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:#0f172a; color:#111827; }
+    .container { max-width:100%; padding:18px 20px 60px; }
+    .panel { background:#fff; border-radius:18px; padding:22px 26px 34px; box-shadow:0 14px 38px -10px rgba(0,0,0,0.35); }
+    h1 { margin:0 0 14px; font-size:1.9rem; letter-spacing:.5px; }
+    p.sub { margin:0 0 18px; color:#475569; font-size:14px; }
+    .global-search-wrap { display:flex; align-items:center; gap:10px; margin:0 0 16px; flex-wrap:wrap; }
+    .global-search-wrap input { flex:1 1 360px; padding:12px 14px; border:1px solid #cbd5e1; border-radius:10px; font-size:15px; background:#f8fafc; }
+    .global-search-wrap button { padding:12px 18px; border-radius:10px; border:1px solid #6366f1; background:#6366f1; color:#fff; cursor:pointer; font-size:14px; }
+    .global-search-wrap button.secondary { background:#64748b; border-color:#64748b; }
+    #column-counts { display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 18px; }
+    .col-count-badge { background:#f1f5f9; padding:6px 10px; border-radius:8px; font-size:12px; display:flex; align-items:center; gap:6px; line-height:1.1; }
+    .col-count-badge .col-name { font-weight:500; color:#334155; }
+    .col-count-badge .col-num { background:#6366f1; color:#fff; padding:2px 6px; border-radius:6px; font-weight:600; min-width:22px; text-align:center; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#f1f5f9; }
+    .no-match { padding:20px; color:#dc2626; }
+    .meta { display:flex; gap:14px; flex-wrap:wrap; margin:6px 0 18px; }
+    .meta-item { background:#f1f5f9; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.3; min-width:160px; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="panel">
+      <h1>company_presence_matrix</h1>
+      <p class="sub">Presence across datasets by canonical company name. Search to filter; badges show non-empty entries per column.</p>
+      <div class="global-search-wrap">
+        <input id="global-search" placeholder="Search any company name..." />
+        <button id="clear-search" type="button" class="secondary">Clear</button>
+        <button id="export-csv" type="button">Download CSV</button>
+      </div>
+      <div class="meta" id="meta-stats"></div>
+      <div id="column-counts"></div>
+      <div id="top-scroll" class="top-scroll" style="display:none;">
+        <div id="top-scroll-spacer"></div>
+      </div>
+      <div id="presence-table"></div>
+      <div id="no-results" class="no-match" style="display:none;">No rows match current search.</div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let allData=[]; let allFields=[]; let lastQuery=''; let baseCounts={}; let totalRows=0;
+
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const tableEl=document.querySelector('#presence-table .tabulator-table'); if(spacer&&tableEl) spacer.style.width=tableEl.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#presence-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#presence-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+
+    function highlightFormatter(cell){ const q=lastQuery; const val=cell.getValue(); if(val==null) return ''; const s=String(val); if(!q) return s; const idx=s.toLowerCase().indexOf(q.toLowerCase()); if(idx===-1) return s; const before=s.slice(0,idx); const match=s.slice(idx, idx+q.length); const after=s.slice(idx+q.length); return `${before}<span style=\"background:#fde047; padding:0 2px; border-radius:3px;\">${match}</span>${after}`; }
+    function buildColumns(exampleRow){ const cols=[]; for(const key of Object.keys(exampleRow)){ cols.push({ title:key, field:key, formatter:highlightFormatter, width:Math.min(360, Math.max(160, key.length*16)) }); } return cols; }
+
+    function renderColumnCounts(map){ const wrap=document.getElementById('column-counts'); if(!wrap) return; const frag=document.createDocumentFragment(); for(const col of allFields){ const count=map[col] ?? 0; const div=document.createElement('div'); div.className='col-count-badge'; div.innerHTML=`<span class=\"col-name\">${col}</span><span class=\"col-num\">${count}</span>`; frag.appendChild(div); } wrap.innerHTML=''; wrap.appendChild(frag); }
+
+    function computeBaseCounts(){ const counts={}; allFields.forEach(f=>counts[f]=0); for(const row of allData){ for(const f of allFields){ const v=row[f]; if(v!=null && String(v).trim()!=='') counts[f]++; } } return counts; }
+
+    function computeFilteredCounts(q){ if(!q) return baseCounts; const counts={}; allFields.forEach(f=>counts[f]=0); const active=table.getData('active'); for(const row of active){ for(const f of allFields){ const v=row[f]; if(v!=null && String(v).trim()!=='') counts[f]++; } } return counts; }
+
+    function updateMeta(){ const meta=document.getElementById('meta-stats'); if(!meta) return; const active=table? table.getData('active').length : totalRows; meta.innerHTML = `<div class=\"meta-item\"><strong>Total Rows:</strong> ${totalRows}</div><div class=\"meta-item\"><strong>Visible Rows:</strong> ${active}</div>`; }
+
+    function buildTable(data){ if(!data.length){ document.getElementById('presence-table').innerHTML='<div style=\"padding:16px;\">No data.</div>'; return; }
+      allFields=Object.keys(data[0]);
+      table=new Tabulator('#presence-table',{ data, layout:'fitData', pagination:true, paginationSize:400, movableColumns:true, columnDefaults:{resizable:true,minWidth:140}, columns:buildColumns(data[0]), });
+      table.on('tableBuilt',()=>{ setupTopScroll(); updateMeta(); });
+      table.on('dataFiltered',()=>{ updateMeta(); document.getElementById('no-results').style.display= table.getDataCount('active')? 'none':'block'; });
+      table.on('columnResized',syncTopScrollWidth); table.on('columnMoved',syncTopScrollWidth); table.on('renderComplete',syncTopScrollWidth);
+    }
+
+    function applyGlobalSearch(){ const q=document.getElementById('global-search').value.trim().toLowerCase(); lastQuery=q; if(!table) return; if(!q){ table.clearFilter(); lastQuery=''; document.getElementById('no-results').style.display='none'; renderColumnCounts(computeFilteredCounts('')); updateMeta(); table.getColumns().forEach(c=>c.show()); table.redraw(true); return; }
+      table.setFilter((row)=>{ for(const f of allFields){ const v=row[f]; if(v!=null && String(v).toLowerCase().includes(q)) return true; } return false; }); const active=table.getData('active'); document.getElementById('no-results').style.display= active.length? 'none':'block'; renderColumnCounts(computeFilteredCounts(q)); updateMeta(); table.getColumns().forEach(c=>c.show()); table.redraw(true); }
+
+    function attachHandlers(){ const input=document.getElementById('global-search'); input.addEventListener('input', applyGlobalSearch); document.getElementById('clear-search').addEventListener('click',()=>{ input.value=''; lastQuery=''; applyGlobalSearch(); }); document.getElementById('export-csv').addEventListener('click',()=>{ if(!table) return; const q=document.getElementById('global-search').value.trim(); const filename=q? 'company_presence_matrix_filtered.csv':'company_presence_matrix_full.csv'; table.download('csv', filename, { rowRange: q? 'active':'all' }); }); }
+
+    async function init(){ try { const res=await fetch('/api/company_presence_matrix'); const payload=await res.json(); if(payload.error){ document.getElementById('presence-table').innerHTML='<div style=\"color:#dc2626; padding:18px;\">'+payload.error+'</div>'; return; } allData=payload.data; totalRows=payload.total_rows; buildTable(allData); baseCounts=payload.column_counts; renderColumnCounts(baseCounts); attachHandlers(); updateMeta(); } catch(err){ document.getElementById('presence-table').innerHTML='<div style=\"color:#dc2626; padding:18px;\">Failed to load data: '+err+'</div>'; } }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Correlation Results (10-K)</title>
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+    <link href="/static/css/main.css" rel="stylesheet" />
+    <style>
+        .container {
+            max-width: 100%;
+            padding: 20px
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, .08);
+            padding: 18px
+        }
+
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 0 0 12px
+        }
+
+        .filter-input {
+            padding: 8px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            min-width: 150px
+        }
+
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 0 0 10px
+        }
+
+        .stat {
+            background: #f1f5f9;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.2
+        }
+
+        .top-scroll {
+            overflow-x: auto;
+            overflow-y: hidden;
+            height: 14px;
+            margin: 8px 0;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px
+        }
+
+        .top-scroll::-webkit-scrollbar {
+            height: 10px
+        }
+
+        .btn {
+            padding: 8px 12px;
+            background: #1d4ed8;
+            color: #fff;
+            border: 1px solid #1d4ed8;
+            border-radius: 6px;
+            cursor: pointer
+        }
+
+        .btn:hover {
+            background: #1e40af
+        }
+    </style>
+</head>
+
+<body>{% include 'navbar.html' %}<div class="container">
+        <div class="card">
+            <h1>Correlation Results</h1>
+            <div class="meta"
+                style="background:#eef2ff;padding:10px 14px;border-radius:8px;margin:0 0 14px;font-size:.9rem;color:#1e3a8a">
+                Dataset: <code>data/10k/correlation_results.csv</code></div>
+            <div class="stats">
+                <div class="stat">Rows<br><strong id="stat-rows">0</strong></div>
+                <div class="stat">Columns<br><strong id="stat-cols">0</strong></div>
+            </div>
+            <div class="filters"><input id="flt-include" class="filter-input" placeholder="Include text" /><input
+                    id="flt-exact" class="filter-input" placeholder="Exact column" /></div>
+            <div style="margin:4px 0 8px"><button id="download-csv" class="btn" type="button">Download CSV</button>
+            </div>
+            <div id="top-scroll" class="top-scroll" style="display:none">
+                <div id="top-scroll-spacer"></div>
+            </div>
+            <div id="table"></div>
+        </div>
+    </div>
+    <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    <script>let table, columnsCache = []; function syncTop() { const s = document.getElementById('top-scroll-spacer'); const el = document.querySelector('#table .tabulator-table'); if (s && el) s.style.width = el.scrollWidth + 'px' } function setupTop() { const top = document.getElementById('top-scroll'); const holder = document.querySelector('#table .tabulator-tableholder'); if (!top || !holder) return; top.addEventListener('scroll', () => holder.scrollLeft = top.scrollLeft); holder.addEventListener('scroll', () => top.scrollLeft = holder.scrollLeft); syncTop(); top.style.display = 'block'; if (window.ResizeObserver) { const el = document.querySelector('#table .tabulator-table'); if (el) new ResizeObserver(syncTop).observe(el) } window.addEventListener('resize', syncTop) } function build(data) { const cols = []; if (data.length) { Object.keys(data[0]).forEach(k => cols.push({ title: k, field: k, width: 160 })) } columnsCache = cols.map(c => c.field); table = new Tabulator('#table', { data, layout: 'fitData', pagination: true, paginationSize: 400, movableColumns: true, columnDefaults: { resizable: true, minWidth: 140 }, columns: cols }); table.on('tableBuilt', () => { setupTop(); updateStats(table.getData()) }); table.on('dataFiltered', (_, rows) => updateStats(rows.map(r => r.getData())));['columnResized', 'columnMoved', 'renderComplete'].forEach(ev => table.on(ev, syncTop)); attach(); } function updateStats(data) { document.getElementById('stat-rows').textContent = data.length; document.getElementById('stat-cols').textContent = columnsCache.length; } function attach() { ['flt-include', 'flt-exact'].forEach(id => document.getElementById(id).addEventListener('input', applyFilters)); document.getElementById('download-csv').addEventListener('click', () => { const visible = table.getColumns().filter(c => c.isVisible && c.isVisible()).map(c => c.getField()).filter(Boolean); table.download('csv', 'correlation_results.csv', { columns: visible, rowRange: 'active' }) }) } function applyFilters() { const inc = document.getElementById('flt-include').value.trim().toLowerCase(); const exact = document.getElementById('flt-exact').value.trim(); if (!inc && !exact) { table.clearFilter(); return; } table.setFilter(row => { if (inc) { let any = false; for (const k in row) { if (String(row[k] || '').toLowerCase().includes(inc)) { any = true; break } } if (!any) return false; } if (exact) { if (!(exact in row)) return false; } return true }); } async function init() { const r = await fetch('/api/correlation_results'); const d = await r.json(); if (d.error) { document.getElementById('table').innerHTML = '<div style="color:#dc2626;padding:18px">' + d.error + '</div>'; return } build(d) } document.addEventListener('DOMContentLoaded', init);</script>
+</body>
+
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Intro</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:#f1f5f9; }
+    .container { max-width:900px; margin:30px auto 60px; background:#fff; padding:32px 40px; border-radius:18px; box-shadow:0 12px 36px -8px rgba(0,0,0,0.15); }
+    h1,h2,h3,h4 { line-height:1.25; }
+    pre { background:#0f172a; color:#e2e8f0; padding:14px 16px; border-radius:8px; overflow:auto; }
+    code { background:#f1f5f9; padding:2px 5px; border-radius:4px; font-size:0.95em; }
+    table { border-collapse:collapse; width:100%; margin:18px 0; }
+    th,td { border:1px solid #e2e8f0; padding:8px 10px; text-align:left; }
+    th { background:#f8fafc; }
+    blockquote { border-left:4px solid #6366f1; margin:16px 0; padding:6px 14px; background:#f5f7ff; }
+    hr { border:none; border-top:1px solid #e2e8f0; margin:32px 0; }
+    .readme :first-child { margin-top:0; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="readme">{{ readme_html|safe }}</div>
+  </div>
+</body>
+</html>

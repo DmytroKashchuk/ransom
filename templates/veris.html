@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VERIS Dataset</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; font-family: var(--font-stack, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif); background: var(--bg-gradient, #f1f5f9); }
+    .container { max-width:100%; padding:18px 20px 60px; }
+    .panel { background:#ffffff; border-radius:18px; padding:22px 26px 30px; box-shadow:0 10px 28px rgba(0,0,0,0.08); }
+    h1 { margin:0 0 10px; font-size:1.7rem; }
+    .meta { background:#eef2ff; padding:10px 14px; border-radius:10px; font-size:13px; color:#1e3a8a; margin:0 0 16px; line-height:1.35; }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 14px; }
+    .filter-input { padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; min-width:160px; font-size:13px; }
+    .btn { padding:8px 12px; border:1px solid #1d4ed8; background:#1d4ed8; color:#fff; border-radius:8px; cursor:pointer; font-size:13px; }
+    .btn-alt { background:#64748b; border-color:#64748b; }
+    .stats { display:flex; flex-wrap:wrap; gap:12px; margin:0 0 14px; }
+    .stat { background:#f1f5f9; padding:8px 12px; border-radius:10px; font-size:12px; line-height:1.2; min-width:120px; box-shadow:var(--shadow-sm,0 1px 2px rgba(0,0,0,.05)); }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar { height:8px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .col-picker { margin:0 0 12px; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="panel">
+      <h1>VERIS Incident Records</h1>
+      <div class="meta">
+        Dataset: <code>veris.csv</code> — Raw records approximating the VERIS (Vocabulary for Event Recording and Incident Sharing) schema. Wide table with action, actor, asset, attribute, impact, and timeline fields. Use column picker and filters to explore.
+      </div>
+      <div class="stats" id="stats-bar">
+        <div class="stat">Records<br><strong id="stat-records">0</strong></div>
+        <div class="stat">Victims<br><strong id="stat-victims">0</strong></div>
+        <div class="stat">Countries<br><strong id="stat-countries">0</strong></div>
+        <div class="stat">Actions (Hacking Varieties)<br><strong id="stat-hacking">0</strong></div>
+        <div class="stat">Malware Varieties<br><strong id="stat-malware">0</strong></div>
+      </div>
+      <div class="filters">
+        <input id="flt-victim" class="filter-input" placeholder="Victim (victim_victim_id)" />
+        <input id="flt-country" class="filter-input" placeholder="Victim Country" />
+        <input id="flt-actor" class="filter-input" placeholder="External Actor Motive" />
+        <input id="flt-year" class="filter-input" placeholder="Incident Year" />
+        <input id="flt-hacking" class="filter-input" placeholder="Hacking Variety" />
+        <button id="btn-reset" class="btn-alt btn" type="button">Reset</button>
+        <button id="btn-export" class="btn" type="button">Download CSV</button>
+      </div>
+      <div class="col-picker">
+        <details class="column-picker">
+          <summary style="cursor:pointer; padding:8px 12px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px;">Columns</summary>
+          <div id="col-box" style="border:1px solid #cbd5e1; border-radius:8px; padding:10px; margin-top:8px; max-height:260px; overflow:auto; background:#fff;"></div>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button id="btn-show-all" class="btn-alt btn" type="button">Show All</button>
+            <button id="btn-hide-all" class="btn-alt btn" type="button">Hide All</button>
+          </div>
+        </details>
+      </div>
+      <div id="top-scroll" class="top-scroll" style="display:none;">
+        <div id="top-scroll-spacer"></div>
+      </div>
+      <div id="veris-table"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let fullData=[];
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#veris-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#veris-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#veris-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+    function updateStats(data){
+      document.getElementById('stat-records').textContent=data.length;
+      document.getElementById('stat-victims').textContent=new Set(data.map(r=>r.victim_victim_id||r.victim_victim||r.victim_id).filter(Boolean)).size;
+      document.getElementById('stat-countries').textContent=new Set(data.map(r=>r.victim_country||r.victim_country_1||r['victim.country']).filter(Boolean)).size;
+      document.getElementById('stat-hacking').textContent=new Set(data.map(r=>r.action_hacking_variety||r['action.hacking.variety']).filter(Boolean)).size;
+      document.getElementById('stat-malware').textContent=new Set(data.map(r=>r.action_malware_variety||r['action.malware.variety']).filter(Boolean)).size;
+    }
+    function buildColumnPicker(){ const box=document.getElementById('col-box'); if(!box||!table) return; box.innerHTML=''; table.getColumns().forEach(col=>{ const f=col.getField&&col.getField(); if(!f) return; const label=document.createElement('label'); label.style.display='flex'; label.style.alignItems='center'; label.style.gap='6px'; label.style.fontSize='12px'; label.style.margin='4px 0'; const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=col.isVisible(); cb.addEventListener('change',()=>{ cb.checked?col.show():col.hide(); setTimeout(syncTopScrollWidth,0); }); const span=document.createElement('span'); span.textContent=f; label.appendChild(cb); label.appendChild(span); box.appendChild(label); }); }
+    function attachColumnPickerButtons(){ document.getElementById('btn-show-all').addEventListener('click',()=>{ table.getColumns().forEach(c=>c.show()); buildColumnPicker(); setTimeout(syncTopScrollWidth,0); }); document.getElementById('btn-hide-all').addEventListener('click',()=>{ table.getColumns().forEach(c=>{ if(['victim_victim_id','victim_victim','victim_id','action_hacking_variety','action_malware_variety'].includes(c.getField())) c.show(); else c.hide(); }); buildColumnPicker(); setTimeout(syncTopScrollWidth,0); }); }
+    function buildTable(data){
+      const columns=[];
+      if(data && data.length){
+        const sample=data[0];
+        const keys=Object.keys(sample);
+        const victimKeys=keys.filter(k=>k.startsWith('victim_'));
+        const otherKeys=keys.filter(k=>!k.startsWith('victim_'));
+        const ordered=[...victimKeys, ...otherKeys];
+        ordered.forEach(k=>{ columns.push({ title:k, field:k, width:180 }); });
+      }
+      table=new Tabulator('#veris-table',{ data, layout:'fitData', pagination:true, paginationSize:300, movableColumns:true, columnDefaults:{resizable:true,minWidth:140}, columns });
+      table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); buildColumnPicker(); attachColumnPickerButtons(); });
+      table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData())));
+      table.on('columnResized',syncTopScrollWidth); table.on('columnMoved',syncTopScrollWidth); table.on('renderComplete',syncTopScrollWidth);
+      attachFilters();
+    }
+    function attachFilters(){ document.getElementById('btn-reset').addEventListener('click',()=>{ ['flt-victim','flt-country','flt-actor','flt-year','flt-hacking'].forEach(id=>document.getElementById(id).value=''); applyFilters(); }); document.getElementById('btn-export').addEventListener('click',()=>{ const visibleCols=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean); table.download('csv','veris_export.csv',{columns:visibleCols,rowRange:'active'}); }); ['flt-victim','flt-country','flt-actor','flt-year','flt-hacking'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('input',applyFilters); }); }
+  function applyFilters(){ const victim=document.getElementById('flt-victim').value.trim().toLowerCase(); const country=document.getElementById('flt-country').value.trim().toLowerCase(); const actor=document.getElementById('flt-actor').value.trim().toLowerCase(); const year=document.getElementById('flt-year').value.trim(); const hacking=document.getElementById('flt-hacking').value.trim().toLowerCase(); table.setFilter(row=>{ const r=row._row.data; if(victim && !(String(r.victim_victim_id||r.victim_victim||r.victim_id||'').toLowerCase().includes(victim))) return false; if(country && !(String(r.victim_country||r.victim_country_1||r['victim.country']||'').toLowerCase().includes(country))) return false; if(actor && !(String(r.actor_external_motive||r['actor.external.motive']||'').toLowerCase().includes(actor))) return false; if(year){ const y=String(r.timeline_incident_year||r['timeline.incident.year']||''); if(y!==year) return false; } if(hacking && !(String(r.action_hacking_variety||r['action.hacking.variety']||'').toLowerCase().includes(hacking))) return false; return true; }); }
+    async function init(){ const res=await fetch('/api/veris'); const data=await res.json(); if(data.error){ document.getElementById('veris-table').innerHTML='<div style="color:#dc2626; padding:18px;">'+data.error+'</div>'; return; } fullData=data; buildTable(data); }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

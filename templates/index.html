@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ransomware Victims Dashboard</title>
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet">
+    <link href="/static/css/main.css" rel="stylesheet" />
+    <style>
+        body { margin:0; background:#1e293b; }
+        .container { max-width:100%; padding:18px 20px 60px; }
+        .panel { background:#fff; border-radius:16px; padding:20px 24px 30px; box-shadow:0 12px 32px -8px rgba(0,0,0,0.25); }
+        .filters { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
+        .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; min-width:200px; font-size:14px; }
+        .btn { padding:10px 14px; border:1px solid #6366f1; background:#6366f1; color:#fff; border-radius:8px; cursor:pointer; }
+        .btn-alt { background:#64748b; border-color:#64748b; }
+        .stats { display:flex; flex-wrap:wrap; gap:14px; margin:4px 0 18px; }
+        .stat { background:#f1f5f9; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.3; min-width:150px; }
+        .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; }
+        .top-scroll::-webkit-scrollbar { height:10px; }
+        .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+        .top-scroll::-webkit-scrollbar-track { background:#f1f5f9; }
+        .tabulator-col-title { font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.5px; }
+        .notice { background:#fff3cd; color:#856404; border-radius:8px; padding:10px 14px; margin:4px 0 14px; font-size:.9rem; }
+    </style>
+</head>
+<body>
+    {% include 'navbar.html' %}
+    <div class="container">
+        <div class="panel">
+            <h1 style="margin:0 0 12px; font-size:1.8rem;">Ransomware Victims Dashboard in SWDB</h1>
+            <div class="notice"><strong>⚠️ Data:</strong> Some domains link to multiple account IDs in Spiceworks, causing potential duplicates. Interpret with caution.</div>
+            <div class="stats" id="stats-bar">
+                <div class="stat">Total Victims<br><strong id="total-victims">0</strong></div>
+                <div class="stat">Countries<br><strong id="total-countries">0</strong></div>
+                <div class="stat">Groups<br><strong id="total-groups">0</strong></div>
+                <div class="stat">Unique Site IDs<br><strong id="unique-site-ids">0</strong></div>
+            </div>
+            <div class="filters">
+                <input type="number" id="filter-employees-min" class="filter-input" placeholder="Min employees" min="0" />
+                <button id="apply-employee-filter" class="btn" type="button">Apply</button>
+                <input type="text" id="filter-domain" class="filter-input" placeholder="Domain" />
+                <input type="text" id="filter-company" class="filter-input" placeholder="Company" />
+                <input type="text" id="filter-country" class="filter-input" placeholder="Country" />
+                <input type="text" id="filter-group" class="filter-input" placeholder="Group" />
+                <button id="toggle-max-employees" class="btn-alt btn" type="button" style="background:#0d9488;border-color:#0d9488;">Show Max Employees per Domain</button>
+                <button id="download-csv" class="btn" type="button">Download CSV</button>
+            </div>
+            <div id="top-scroll" class="top-scroll" style="display:none;">
+                <div id="top-scroll-spacer"></div>
+            </div>
+            <div style="margin:10px 0 10px;">
+                <details class="column-picker">
+                    <summary>Columns</summary>
+                    <div class="picker-panel">
+                        <div id="column-checkboxes"></div>
+                        <div class="col-actions" style="display:flex; gap:8px; margin-top:8px;">
+                            <button type="button" id="columns-show-all" class="btn">Show All</button>
+                            <button type="button" id="columns-hide-all" class="btn-alt btn">Hide All</button>
+                        </div>
+                    </div>
+                </details>
+            </div>
+            <div id="loading" class="loading">Loading data...</div>
+            <div id="error" class="error" style="display:none;"></div>
+            <div id="victims-table"></div>
+        </div>
+    </div>
+
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    <!-- JS unchanged except DOM target adjustments already consistent -->
+    <script>
+        let table; let tableData = []; let isMaxMode = false; let fullData = [];
+        const filterState = { domain:'', company:'', country:'', group:'', minEmp:null };
+        function currencyFormatter(cell){ const v=cell.getValue(); if(v===0) return '$0'; if(v!=null && !isNaN(Number(v))) return '$'+ new Intl.NumberFormat('en-US').format(Number(v)); return '-'; }
+        function numberFormatter(cell){ const v=cell.getValue(); if(v===0) return '0'; if(v!=null && !isNaN(Number(v))) return new Intl.NumberFormat('en-US').format(Number(v)); return '-'; }
+        function dateFormatter(cell){ const v=cell.getValue(); if(v){ const d=new Date(v); if(!isNaN(d)) return d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});} return '-'; }
+        function urlFormatter(cell){ const v=cell.getValue(); if(v) return `<a href="https://${v}" target="_blank" style="color:#6366f1;">${v}</a>`; return '-'; }
+        function groupFormatter(cell){ const v=cell.getValue(); return v? String(v):'-'; }
+        function countryFormatter(cell){ const v=cell.getValue(); return v? String(v):'-'; }
+        function activityFormatter(cell){ const v=cell.getValue(); return v? String(v):'-'; }
+        function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#victims-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+        function setupTopHorizontalScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#victims-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#victims-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+        async function fetchData(){ try { const r=await fetch('/api/data'); if(!r.ok) throw new Error('Failed to fetch data'); tableData=await r.json(); fullData=tableData.slice(); document.getElementById('loading').style.display='none'; initializeTable(tableData); updateStatistics(table.getData()); } catch(e){ document.getElementById('loading').style.display='none'; const err=document.getElementById('error'); err.style.display='block'; err.textContent='Error loading data: '+e.message; } }
+        function updateStatistics(data){ const uniqueVictims=new Set(data.map(d=>d.url)).size; const uniqueCountries=new Set(data.map(d=>d.ACCOUNT_COUNTRY).filter(c=>c)).size; const uniqueGroups=new Set(data.map(d=>d.group_name).filter(g=>g)).size; const siteIdSet=new Set(); for(const row of data){ const idsStr=row.site_ids; if(idsStr && typeof idsStr==='string'){ idsStr.split(';').forEach(s=>{ const t=s.trim(); if(t) siteIdSet.add(t); }); } } document.getElementById('total-victims').textContent=uniqueVictims; document.getElementById('total-countries').textContent=uniqueCountries; document.getElementById('total-groups').textContent=uniqueGroups; const siteEl=document.getElementById('unique-site-ids'); if(siteEl) siteEl.textContent=siteIdSet.size; }
+        function combinedFilter(data,params){ const url=(data.url||'').toLowerCase(); const company=(data.ACCOUNT_TRADE_NAME||'').toLowerCase(); const country=(data.ACCOUNT_COUNTRY||'').toLowerCase(); const group=(data.group_name||'').toLowerCase(); if(params.domain && !url.includes(params.domain)) return false; if(params.company && !company.includes(params.company)) return false; if(params.country && !country.includes(params.country)) return false; if(params.group && !group.includes(params.group)) return false; const empRaw=data.ACCOUNT_EMPLOYEES; const emp=(empRaw===null||empRaw===undefined||empRaw===''? NaN: Number(empRaw)); if(params.minEmp!=null && !(emp>=params.minEmp)) return false; return true; }
+        function applyFilters(){ if(!table) return; table.setFilter(combinedFilter,{...filterState}); }
+        function buildColumnPicker(){ const cont=document.getElementById('column-checkboxes'); if(!cont||!table) return; cont.innerHTML=''; table.getColumns().forEach(col=>{ const field=col.getField&&col.getField(); if(!field) return; const def=col.getDefinition? col.getDefinition():{}; const title=def.title||field; const row=document.createElement('label'); row.className='col-row'; const id=`col-${field.replace(/[^a-zA-Z0-9_-]/g,'_')}`; const cb=document.createElement('input'); cb.type='checkbox'; cb.id=id; cb.checked=col.isVisible? col.isVisible():true; cb.addEventListener('change',()=>{ if(cb.checked) col.show(); else col.hide(); setTimeout(syncTopScrollWidth,0); }); const lbl=document.createElement('span'); lbl.textContent=title; row.appendChild(cb); row.appendChild(lbl); cont.appendChild(row); }); }
+        function setupColumnPickerEvents(){ const showAllBtn=document.getElementById('columns-show-all'); const hideAllBtn=document.getElementById('columns-hide-all'); if(showAllBtn){ showAllBtn.addEventListener('click',()=>{ table.getColumns().forEach(c=>c.show()); buildColumnPicker(); setTimeout(syncTopScrollWidth,0); }); } if(hideAllBtn){ hideAllBtn.addEventListener('click',()=>{ table.getColumns().forEach(c=>{ const f=c.getField&&c.getField(); if(f==='url') c.show(); else c.hide(); }); buildColumnPicker(); setTimeout(syncTopScrollWidth,0); }); } }
+        function initializeTable(data){ table=new Tabulator('#victims-table',{ data, layout:'fitData', responsiveLayout:false, pagination:true, paginationSize:300, paginationCounter:'rows', movableColumns:true, resizableRows:true, initialSort:[{column:'discovered',dir:'desc'}], columnDefaults:{resizable:true,minWidth:100}, columns:[ {title:'Domain',field:'url',formatter:urlFormatter,width:200}, {title:'Account ID',field:'ACCOUNT_ID',width:120}, {title:'Company',field:'ACCOUNT_NAME',width:200}, {title:'Trade Name',field:'ACCOUNT_TRADE_NAME',width:200}, {title:'Country',field:'ACCOUNT_COUNTRY',formatter:countryFormatter,width:120}, {title:'Ransomware Group',field:'group_name',formatter:groupFormatter,width:150}, {title:'Activity',field:'activity',formatter:activityFormatter,width:130}, {title:'Discovered',field:'discovered',formatter:dateFormatter,width:180}, {title:'Published',field:'published',formatter:dateFormatter,width:180}, {title:'Employees',field:'ACCOUNT_EMPLOYEES',formatter:numberFormatter,width:120}, {title:'IT Staff',field:'ACCOUNT_IT_EMPLOYEES',formatter:numberFormatter,width:100}, {title:'Revenue (USD)',field:'ACCOUNT_REVENUE_USD',formatter:currencyFormatter,width:150}, {title:'ICT Spending',field:'ACCOUNT_ICT_SPENDING',formatter:currencyFormatter,width:150}, {title:'Post Title',field:'post_title',width:200}, {title:'Post URL',field:'post_url',formatter:urlFormatter,width:200}, {title:'Victim URL',field:'victim_url',formatter:urlFormatter,width:200}, {title:'SIC Code',field:'ACCOUNT_PRI_SIC4_CODE',width:120}, ],}); table.on('tableBuilt',()=>{ setupTopHorizontalScroll(); buildColumnPicker(); setupColumnPickerEvents(); }); table.on('columnResized',syncTopScrollWidth); table.on('columnMoved',syncTopScrollWidth); table.on('renderComplete',syncTopScrollWidth); table.on('dataFiltered',(_,rows)=> updateStatistics(rows.map(r=>r.getData()))); }
+        document.addEventListener('DOMContentLoaded',fetchData);
+        document.addEventListener('click',e=>{ if(e.target && e.target.id==='download-csv'){ if(!table) return; const visibleCols=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean); if(!visibleCols.length){ alert('No visible columns to export. Please select at least one column.'); return; } table.download('csv','ransomware_victims.csv',{columns:visibleCols,rowRange:'active'}); } });
+        function computeMaxEmployeesPerDomain(data){ const map=new Map(); for(const row of data){ const domain=row.url||'__NO_DOMAIN__'; const raw=row.ACCOUNT_EMPLOYEES; const emp=(raw==null||raw===''||isNaN(Number(raw)))? -Infinity: Number(raw); if(!(emp>0)) continue; if(!map.has(domain)) map.set(domain,{max:emp,rows:[row]}); else { const entry=map.get(domain); if(emp>entry.max){ entry.max=emp; entry.rows=[row]; } else if(emp===entry.max){ entry.rows.push(row); } } } const result=[]; for(const {rows} of map.values()) result.push(...rows); return result; }
+        function toggleMaxEmployeesMode(){ if(!table) return; const btn=document.getElementById('toggle-max-employees'); if(!isMaxMode){ const subset=computeMaxEmployeesPerDomain(fullData); table.setData(subset).then(()=>{ applyFilters(); updateStatsFromCurrentView(); }); isMaxMode=true; btn.textContent='Show All Rows'; btn.style.background='#2563eb'; btn.style.borderColor='#2563eb'; } else { table.setData(fullData).then(()=>{ applyFilters(); updateStatsFromCurrentView(); }); isMaxMode=false; btn.textContent='Show Max Employees per Domain'; btn.style.background='#0d9488'; btn.style.borderColor='#0d9488'; } }
+        document.addEventListener('click',e=>{ if(e.target && e.target.id==='toggle-max-employees') toggleMaxEmployeesMode(); });
+        function updateStatsFromCurrentView(){ if(!table) return; let rows=[]; try { rows=table.getRows('active'); } catch(e){ rows=table.getRows(); } const data=rows.map(r=>r.getData()); updateStatistics(data); }
+        (function setupEnhancedFilters(){ const minEmpInput=document.getElementById('filter-employees-min'); const applyEmpBtn=document.getElementById('apply-employee-filter'); const setAndApply=(k,v)=>{ filterState[k]=v; applyFilters(); updateStatsFromCurrentView(); }; document.getElementById('filter-domain').addEventListener('input',e=> setAndApply('domain',e.target.value.trim().toLowerCase())); document.getElementById('filter-company').addEventListener('input',e=> setAndApply('company',e.target.value.trim().toLowerCase())); document.getElementById('filter-country').addEventListener('input',e=> setAndApply('country',e.target.value.trim().toLowerCase())); document.getElementById('filter-group').addEventListener('input',e=> setAndApply('group',e.target.value.trim().toLowerCase())); applyEmpBtn.addEventListener('click',()=>{ const v=minEmpInput.value; filterState.minEmp=(v==='')? null: parseInt(v,10); applyFilters(); updateStatsFromCurrentView(); }); minEmpInput.addEventListener('keydown',e=>{ if(e.key==='Enter') applyEmpBtn.click(); }); })();
+    </script>
+</body>
+</html>

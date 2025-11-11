@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Google Sites (Spiceworks)</title>
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+    <link href="/static/css/main.css" rel="stylesheet" />
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f3f6fa; }
+        .container { max-width: 100%; padding: 20px; }
+        .card { background: #fff; border-radius: 14px; box-shadow: 0 10px 28px rgba(0,0,0,0.08); padding: 18px; }
+        h1 { margin: 0 0 12px; font-size: 1.6rem; }
+        .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+        .filter-input { padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; min-width: 200px; }
+        .top-scroll { overflow-x: auto; overflow-y: hidden; height: 14px; margin: 8px 0; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; }
+        .top-scroll::-webkit-scrollbar { height: 10px; }
+        .top-scroll::-webkit-scrollbar-thumb { background: #c1c9d2; border-radius: 6px; }
+        .top-scroll::-webkit-scrollbar-track { background: #eef1f5; }
+        .footer { text-align: center; padding: 10px 0; color: #6b7280; font-size: 12px; }
+        .meta { background: #fef3c7; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; color: #92400e; }
+    </style>
+</head>
+<body>
+    {% include 'navbar.html' %}
+    <div class="container">
+        <div class="card">
+            <h1>Google / Alphabet Sites (Spiceworks)</h1>
+            <div class="meta">Dataset: <code>google_sites.csv</code> — Individual site/location-level records for Alphabet/Google. Use the filters to search across name, city and URL domain.</div>
+            <div class="filters">
+                <input id="flt-site-id" class="filter-input" placeholder="Filter SITE_ID" />
+                <input id="flt-account-id" class="filter-input" placeholder="Filter ACCOUNT_ID" />
+                <input id="flt-site-name" class="filter-input" placeholder="Filter SITE_NAME" />
+                <input id="flt-city" class="filter-input" placeholder="Filter SITE_CITY" />
+                <input id="flt-url" class="filter-input" placeholder="Filter SITE_URL_DOMAIN" />
+            </div>
+            <div id="top-scroll" class="top-scroll" style="display:none;">
+                <div id="top-scroll-spacer"></div>
+            </div>
+            <div id="sites-table"></div>
+        </div>
+        <div class="footer">Data source: data/google_spicework/google_sites.csv</div>
+    </div>
+
+    <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    <script>
+        let table;
+        function syncTopScrollWidth() {
+            const spacer = document.getElementById('top-scroll-spacer');
+            const tableEl = document.querySelector('#sites-table .tabulator-table');
+            if (spacer && tableEl) spacer.style.width = tableEl.scrollWidth + 'px';
+        }
+        function setupTopHorizontalScroll() {
+            const topScroll = document.getElementById('top-scroll');
+            const holder = document.querySelector('#sites-table .tabulator-tableholder');
+            if (!topScroll || !holder) return;
+            topScroll.addEventListener('scroll', () => { holder.scrollLeft = topScroll.scrollLeft; });
+            holder.addEventListener('scroll', () => { topScroll.scrollLeft = holder.scrollLeft; });
+            syncTopScrollWidth();
+            topScroll.style.display = 'block';
+            if (window.ResizeObserver) { const tableEl = document.querySelector('#sites-table .tabulator-table'); if (tableEl) new ResizeObserver(syncTopScrollWidth).observe(tableEl); }
+            window.addEventListener('resize', syncTopScrollWidth);
+        }
+        function numberFormatter(cell) { const v = cell.getValue(); if (v && !isNaN(Number(v))) return new Intl.NumberFormat('en-US').format(Number(v)); return v ? v : '-'; }
+        function urlFormatter(cell) { const value = cell.getValue(); if (!value) return '-'; return `<a href=\"https://${value}\" target=\"_blank\" style=\"color:#2563eb;\">${value}</a>`; }
+        async function loadData() {
+            const res = await fetch('/api/google_sites');
+            const data = await res.json();
+            const columns = [];
+            if (data && data.length) {
+                const sample = data[0];
+                const numericHint = /(EMPLOYEES|REVENUE|SPENDING|SERVERS|WORKSTATIONS|LAPTOPS|PCS|DESKTOPS|TABLETS|PRINTERS|STORAGE|CODE)$/i;
+                const urlLike = /(URL|_URL_DOMAIN)$/i;
+                Object.keys(sample).forEach(key => {
+                    const val = sample[key];
+                    let formatter = undefined;
+                    if (urlLike.test(key)) formatter = urlFormatter;
+                    else if (numericHint.test(key) && !isNaN(parseFloat(val))) formatter = numberFormatter;
+                    columns.push({ title: key, field: key, formatter, width: 160 });
+                });
+            }
+            table = new Tabulator('#sites-table', {
+                data,
+                layout: 'fitData',
+                pagination: true,
+                paginationSize: 200,
+                movableColumns: true,
+                columnDefaults: { resizable: true, minWidth: 120 },
+                initialSort: [ { column: 'SITE_ID', dir: 'asc' } ],
+                columns,
+            });
+            table.on('tableBuilt', setupTopHorizontalScroll);
+            table.on('columnResized', syncTopScrollWidth);
+            table.on('columnMoved', syncTopScrollWidth);
+            table.on('renderComplete', syncTopScrollWidth);
+            // Filters
+            document.getElementById('flt-site-id').addEventListener('input', e => table.setFilter('SITE_ID', 'like', e.target.value));
+            document.getElementById('flt-account-id').addEventListener('input', e => table.setFilter('ACCOUNT_ID', 'like', e.target.value));
+            document.getElementById('flt-site-name').addEventListener('input', e => table.setFilter('SITE_NAME', 'like', e.target.value));
+            document.getElementById('flt-city').addEventListener('input', e => table.setFilter('SITE_CITY', 'like', e.target.value));
+            document.getElementById('flt-url').addEventListener('input', e => table.setFilter('SITE_URL_DOMAIN', 'like', e.target.value));
+        }
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>

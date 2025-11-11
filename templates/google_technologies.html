@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Technologies (Spiceworks)</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f3f6fa; }
+    .container { max-width:100%; padding:20px; }
+    .card { background:#fff; border-radius:14px; box-shadow:0 10px 28px rgba(0,0,0,0.08); padding:18px; }
+    h1 { margin:0 0 12px; font-size:1.6rem; }
+    .meta { background:#e0f2fe; padding:10px 14px; border-radius:8px; margin:0 0 14px; font-size:0.9rem; color:#075985; }
+    .filters { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 12px; }
+    .filter-input { padding:10px; border:1px solid #d1d5db; border-radius:6px; min-width:160px; }
+    .stats { display:flex; gap:14px; flex-wrap:wrap; margin:0 0 14px; }
+    .stat { background:#f1f5f9; padding:8px 12px; border-radius:8px; font-size:12px; line-height:1.2; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0; background:#f8f9fa; border:1px solid #e9ecef; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#c1c9d2; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#eef1f5; }
+    .download-bar { margin:6px 0 10px; }
+    .btn { padding:8px 12px; background:#1d4ed8; border:1px solid #1d4ed8; color:#fff; border-radius:6px; cursor:pointer; }
+    .btn:hover { background:#1e40af; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="card">
+      <h1>Google / Alphabet Technologies</h1>
+      <div class="meta">Dataset: <code>google_technologies.csv</code> — Technologies observed across Google/Alphabet sites. Filter by product/vendor/confidence or site/product IDs.</div>
+      <div class="stats">
+        <div class="stat">Rows<br><strong id="stat-rows">0</strong></div>
+        <div class="stat">Unique Products<br><strong id="stat-products">0</strong></div>
+        <div class="stat">Unique Vendors<br><strong id="stat-vendors">0</strong></div>
+        <div class="stat">Unique Sites<br><strong id="stat-sites">0</strong></div>
+      </div>
+      <div class="filters">
+        <input id="flt-product" class="filter-input" placeholder="Product" />
+        <input id="flt-vendor" class="filter-input" placeholder="Vendor" />
+        <input id="flt-product-id" class="filter-input" placeholder="Product ID" />
+        <input id="flt-site-id" class="filter-input" placeholder="Site ID" />
+        <input id="flt-confidence" class="filter-input" placeholder="Confidence (e.g. 1,2,3)" />
+        <input id="flt-first-seen" class="filter-input" type="date" placeholder="First Seen" />
+      </div>
+      <div class="download-bar">
+        <button id="download-tech-csv" class="btn" type="button">Download CSV</button>
+      </div>
+      <div id="top-scroll" class="top-scroll" style="display:none;">
+        <div id="top-scroll-spacer"></div>
+      </div>
+      <div id="tech-table"></div>
+    </div>
+    <div style="text-align:center; padding:10px 0; color:#6b7280; font-size:12px;">Data source: data/google_spicework/google_technologies.csv</div>
+  </div>
+
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let rawData=[];
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#tech-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#tech-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#tech-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+    function numberFormatter(cell){ const v=cell.getValue(); if(v!=null && v!=='' && !isNaN(Number(v))) return new Intl.NumberFormat('en-US').format(Number(v)); return v? v : '-'; }
+    async function loadData(){ const res=await fetch('/api/google_technologies'); const data=await res.json(); rawData=data; buildTable(data); }
+    function buildTable(data){ const columns=[]; if(data && data.length){ const sample=data[0]; const numeric=/(_ID$|RANKING$)/i; Object.keys(sample).forEach(k=>{ let formatter=undefined; if(numeric.test(k) && !isNaN(parseFloat(sample[k]))) formatter=numberFormatter; columns.push({ title:k, field:k, formatter, width: k.endsWith('_ID')?140:180 }); }); }
+      table=new Tabulator('#tech-table',{ data, layout:'fitData', pagination:true, paginationSize:400, movableColumns:true, columnDefaults:{resizable:true,minWidth:140}, initialSort:[{column:'PRODUCT_FIRST_SEEN_DATE',dir:'desc'}], columns });
+      table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); });
+      table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData())));
+      table.on('columnResized',syncTopScrollWidth); table.on('columnMoved',syncTopScrollWidth); table.on('renderComplete',syncTopScrollWidth);
+      attachFilters();
+    }
+    function updateStats(data){ document.getElementById('stat-rows').textContent=data.length; document.getElementById('stat-products').textContent=new Set(data.map(r=>r.PRODUCT).filter(Boolean)).size; document.getElementById('stat-vendors').textContent=new Set(data.map(r=>r.PRODUCT_VENDOR).filter(Boolean)).size; document.getElementById('stat-sites').textContent=new Set(data.map(r=>r.SITE_ID).filter(Boolean)).size; }
+    function attachFilters(){ const ids=['flt-product','flt-vendor','flt-product-id','flt-site-id','flt-confidence','flt-first-seen']; ids.forEach(id=>{ const el=document.getElementById(id); const eventType=id==='flt-first-seen'?'change':'input'; el.addEventListener(eventType,applyFilters); }); document.getElementById('download-tech-csv').addEventListener('click',()=>{ const visibleCols=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean); table.download('csv','google_technologies.csv',{columns:visibleCols,rowRange:'active'}); }); }
+    function applyFilters(){ const product=document.getElementById('flt-product').value.trim().toLowerCase(); const vendor=document.getElementById('flt-vendor').value.trim().toLowerCase(); const productId=document.getElementById('flt-product-id').value.trim(); const siteId=document.getElementById('flt-site-id').value.trim(); const confidence=document.getElementById('flt-confidence').value.trim(); const firstSeen=document.getElementById('flt-first-seen').value.trim(); table.setFilter((row)=>{ if(product && !(String(row.PRODUCT||'').toLowerCase().includes(product))) return false; if(vendor && !(String(row.PRODUCT_VENDOR||'').toLowerCase().includes(vendor))) return false; if(productId && String(row.PRODUCT_ID||'')!==productId) return false; if(siteId && String(row.SITE_ID||'')!==siteId) return false; if(confidence && String(row.PRODUCT_CONFIDENCE_RANKING||'').toLowerCase()!==confidence.toLowerCase()) return false; if(firstSeen && String(row.PRODUCT_FIRST_SEEN_DATE||'')!==firstSeen) return false; return true; }); }
+    document.addEventListener('DOMContentLoaded', loadData);
+  </script>
+</body>
+</html>

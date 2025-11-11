@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Municipalities (Revised Oliver)</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:#1e293b; }
+    .container { max-width:100%; padding:18px 20px 60px; }
+    .panel { background:#fff; border-radius:16px; padding:20px 24px 30px; box-shadow:0 12px 32px -8px rgba(0,0,0,0.25); }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
+    .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; min-width:160px; font-size:14px; }
+    .btn { padding:10px 14px; border:1px solid #6366f1; background:#6366f1; color:#fff; border-radius:8px; cursor:pointer; }
+    .btn-alt { background:#64748b; border-color:#64748b; }
+    .stats { display:flex; flex-wrap:wrap; gap:14px; margin:4px 0 18px; }
+    .stat { background:#f1f5f9; padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.3; min-width:150px; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#f1f5f9; }
+    .col-chooser-wrapper { position:relative; }
+    #col-chooser-btn { position:relative; }
+    #col-chooser-panel { position:absolute; top:110%; left:0; z-index:50; background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 16px 12px; width:300px; max-height:380px; overflow:auto; box-shadow:0 6px 18px -4px rgba(0,0,0,0.25); display:none; }
+    #col-chooser-panel h4 { margin:0 0 8px; font-size:14px; font-weight:600; }
+    .col-chooser-actions { display:flex; gap:8px; margin:0 0 10px; }
+    .col-chooser-actions button { flex:1; font-size:12px; padding:6px 8px; }
+    .col-chooser-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+    .col-chooser-list li { font-size:12px; display:flex; align-items:center; gap:6px; }
+    .col-chooser-list input[type=checkbox] { transform:scale(1.05); }
+    .filters .col-chooser-wrapper { align-self:stretch; display:flex; align-items:stretch; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="panel">
+      <h1 style="margin:0 0 12px; font-size:1.8rem;">Municipalities (Revised Oliver)</h1>
+      <div class="stats" id="stats-bar">
+        <div class="stat">Rows<br><strong id="stat-rows">0</strong></div>
+        <div class="stat">Distinct Websites<br><strong id="stat-websites">0</strong></div>
+        <div class="stat">Gov Service True<br><strong id="stat-gov-true">0</strong></div>
+        <div class="stat">Gov Service False<br><strong id="stat-gov-false">0</strong></div>
+      </div>
+      <div class="filters">
+        <input id="flt-title" class="filter-input" placeholder="Post Title" />
+        <input id="flt-actor" class="filter-input" placeholder="Group" />
+        <input id="flt-country" class="filter-input" placeholder="Country" />
+        <input id="flt-website" class="filter-input" placeholder="Website" />
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; background:#f1f5f9; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;">
+          <input type="checkbox" id="chk-has-website" /> Has Website
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; background:#f1f5f9; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;">
+          <input type="checkbox" id="chk-gov-only" /> Gov Service Only
+        </label>
+        <button id="btn-reset" class="btn-alt btn" type="button">Reset</button>
+        <button id="btn-export" class="btn" type="button">Download CSV</button>
+        <div class="col-chooser-wrapper">
+          <button id="col-chooser-btn" class="btn-alt btn" type="button">Columns ▾</button>
+          <div id="col-chooser-panel" aria-hidden="true">
+            <h4>Toggle Columns</h4>
+            <div class="col-chooser-actions">
+              <button id="col-select-all" type="button" class="btn" style="background:#0f766e; border-color:#0f766e;">All</button>
+              <button id="col-deselect-all" type="button" class="btn-alt btn" style="background:#475569; border-color:#475569;">None</button>
+            </div>
+            <ul id="col-chooser-list" class="col-chooser-list"></ul>
+            <div style="margin-top:8px; text-align:right;">
+              <button id="col-close" type="button" class="btn-alt btn" style="padding:6px 10px; font-size:12px;">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="top-scroll" class="top-scroll" style="display:none;">
+        <div id="top-scroll-spacer"></div>
+      </div>
+      <div id="muni-table"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let fullPayload=null; let govColumn=null;
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#muni-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#muni-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#muni-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+    function updateStats(filteredData){ if(!fullPayload) return; const stats=fullPayload.stats||{}; const total=filteredData.length; document.getElementById('stat-rows').textContent=total; if(!filteredData.length){ document.getElementById('stat-websites').textContent=0; document.getElementById('stat-gov-true').textContent=0; document.getElementById('stat-gov-false').textContent=0; return; }
+      const websites=new Set(); let t=0,f=0; filteredData.forEach(r=>{ if(r.website){ websites.add(r.website.trim()); } if(govColumn && r[govColumn]==='True') t++; else if(govColumn && r[govColumn]==='False') f++; });
+      document.getElementById('stat-websites').textContent=websites.size; document.getElementById('stat-gov-true').textContent=t; document.getElementById('stat-gov-false').textContent=f; }
+  function buildColumns(cols){ return cols.map(c=>{ if(c.toLowerCase()==='website') return {title:c, field:c, width:220, formatter:(cell)=>{ const v=cell.getValue(); if(!v) return '-'; const url=v.startsWith('http')?v:`https://${v}`; return `<a href="${url}" target="_blank" style="color:#6366f1;">${v}</a>`; }}; if(c.toLowerCase()==='link') return {title:c, field:c, width:320, formatter:(cell)=>{ const v=cell.getValue(); if(!v) return '-'; const safe=v.replace(/"/g,'&quot;'); return `<a href="${v}" target="_blank" style="color:#6366f1; text-decoration:underline;">${safe}</a>`; }}; if(c.toLowerCase()==='post_title') return {title:'Post Title', field:c, width:260}; return {title:c, field:c, width:160}; }); }
+    function buildTable(payload){ const data=payload.data||[]; govColumn=payload.stats && payload.stats.government_service_column; const cols=buildColumns(payload.columns||Object.keys(data[0]||{})); table=new Tabulator('#muni-table',{ data, layout:'fitData', pagination:true, paginationSize:300, movableColumns:true, initialSort:[], columnDefaults:{resizable:true,minWidth:140}, columns:cols }); table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); }); table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData()))); table.on('columnResized',syncTopScrollWidth); table.on('columnMoved',syncTopScrollWidth); table.on('renderComplete',syncTopScrollWidth); }
+    function applyFilters(){
+      const title=document.getElementById('flt-title').value.trim().toLowerCase();
+      const actor=document.getElementById('flt-actor').value.trim().toLowerCase();
+      const country=document.getElementById('flt-country').value.trim().toLowerCase();
+      const website=document.getElementById('flt-website').value.trim().toLowerCase();
+      const hasWebsite=document.getElementById('chk-has-website').checked;
+      const govOnly=document.getElementById('chk-gov-only').checked;
+      table.setFilter(row=>{
+        if(title && !(String(row.post_title||'').toLowerCase().includes(title))) return false;
+        if(actor && !(String(row.group_name||row.actor||'').toLowerCase().includes(actor))) return false;
+        if(country && !(String(row.country||'').toLowerCase().includes(country))) return false;
+        if(website && !(String(row.website||'').toLowerCase().includes(website))) return false;
+        if(hasWebsite && !String(row.website||'').trim()) return false;
+        if(govOnly && govColumn && row[govColumn] !== 'True') return false;
+        return true;
+      });
+    }
+    function attachFilterHandlers(){
+      ['flt-title','flt-actor','flt-country','flt-website','chk-has-website','chk-gov-only'].forEach(id=>{
+        document.getElementById(id).addEventListener('input',applyFilters);
+      });
+      document.getElementById('btn-reset').addEventListener('click',()=>{
+        ['flt-title','flt-actor','flt-country','flt-website'].forEach(id=>document.getElementById(id).value='');
+        document.getElementById('chk-has-website').checked=false;
+        document.getElementById('chk-gov-only').checked=false;
+        table.clearFilter();
+        updateStats(table.getData());
+      });
+      document.getElementById('btn-export').addEventListener('click',()=>{
+        const visibleCols=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean);
+        table.download('csv','municipalities_filtered.csv',{columns:visibleCols,rowRange:'active'});
+      });
+    }
+
+    function buildColumnChooser(){
+      const panel=document.getElementById('col-chooser-panel');
+      const list=document.getElementById('col-chooser-list');
+      if(!table||!panel||!list) return;
+      list.innerHTML='';
+      const cols=table.getColumns();
+      cols.forEach(col=>{
+        const field=col.getField();
+        if(!field) return;
+        const li=document.createElement('li');
+        const id='colchk_'+field.replace(/[^a-zA-Z0-9_-]/g,'_');
+        li.innerHTML=`<input type="checkbox" id="${id}" data-field="${field}" ${col.isVisible()?'checked':''}/> <label for="${id}" style="cursor:pointer;">${field}</label>`;
+        list.appendChild(li);
+      });
+      list.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+        cb.addEventListener('change',e=>{
+          const f=e.target.getAttribute('data-field');
+          const c=table.getColumn(f);
+            if(!c) return;
+            if(e.target.checked) c.show(); else c.hide();
+            syncTopScrollWidth();
+        });
+      });
+      document.getElementById('col-select-all').onclick=()=>{
+        list.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+          if(!cb.checked){
+            cb.checked=true;
+            const c=table.getColumn(cb.getAttribute('data-field'));
+            c && c.show();
+          }
+        });
+        syncTopScrollWidth();
+      };
+      document.getElementById('col-deselect-all').onclick=()=>{
+        list.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+          if(cb.checked){
+            cb.checked=false;
+            const c=table.getColumn(cb.getAttribute('data-field'));
+            c && c.hide();
+          }
+        });
+        syncTopScrollWidth();
+      };
+      document.getElementById('col-close').onclick=()=>{
+        panel.style.display='none';
+        document.getElementById('col-chooser-btn').classList.remove('active');
+      };
+    }
+
+    function attachColumnChooserToggle(){
+      const btn=document.getElementById('col-chooser-btn');
+      const panel=document.getElementById('col-chooser-panel');
+      if(!btn||!panel) return;
+      btn.addEventListener('click',e=>{
+        e.stopPropagation();
+        const open=panel.style.display==='block';
+        if(open){
+          panel.style.display='none';
+          btn.classList.remove('active');
+        } else {
+          panel.style.display='block';
+          btn.classList.add('active');
+          buildColumnChooser();
+        }
+      });
+      document.addEventListener('click',e=>{
+        if(!panel.contains(e.target) && e.target!==btn){
+          panel.style.display='none';
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    async function init(){
+      const res=await fetch('/api/municipalities/muni_revised_oliver');
+      const payload=await res.json();
+      if(payload.error){
+        document.getElementById('muni-table').innerHTML='<div style="color:#dc2626; padding:18px;">'+payload.error+'</div>';
+        return;
+      }
+      fullPayload=payload;
+      buildTable(payload);
+      attachFilterHandlers();
+      attachColumnChooserToggle();
+    }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

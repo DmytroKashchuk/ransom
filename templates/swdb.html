@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SWDB Ransomed Domains</title>
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+    <link href="/static/css/main.css" rel="stylesheet" />
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f2f4f8; }
+    /* Navbar styles now centralized in main.css */
+        .container { max-width: 100%; padding: 20px; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); padding: 16px; }
+        .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+        .filter-input { padding: 10px; border: 1px solid #ddd; border-radius: 6px; min-width: 200px; }
+        .top-scroll { overflow-x: auto; overflow-y: hidden; height: 14px; margin: 8px 0; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; }
+        .top-scroll::-webkit-scrollbar { height: 10px; }
+        .top-scroll::-webkit-scrollbar-thumb { background: #c1c9d2; border-radius: 6px; }
+        .top-scroll::-webkit-scrollbar-track { background: #eef1f5; }
+        .footer { text-align: center; padding: 10px 0; color: #6b7280; font-size: 12px; }
+    </style>
+</head>
+<body>
+    {% include 'navbar.html' %}
+
+    <div class="container">
+        <div class="card">
+            <div class="filters">
+                <input id="flt-url" class="filter-input" placeholder="Filter by URL" />
+                <input id="flt-site-url" class="filter-input" placeholder="Filter by SITE_URL" />
+                <input id="flt-in-swdb" class="filter-input" placeholder="Filter by in_swdb (True/False)" />
+            </div>
+            <div id="top-scroll" class="top-scroll" style="display:none;">
+                <div id="top-scroll-spacer"></div>
+            </div>
+            <div id="swdb-table"></div>
+        </div>
+        <div class="footer">Data source: ransomed_domains_in_swdb.csv</div>
+    </div>
+
+    <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    <script>
+        let table;
+
+        function syncTopScrollWidth() {
+            const spacer = document.getElementById('top-scroll-spacer');
+            const tableEl = document.querySelector('#swdb-table .tabulator-table');
+            if (spacer && tableEl) spacer.style.width = tableEl.scrollWidth + 'px';
+        }
+        function setupTopHorizontalScroll() {
+            const topScroll = document.getElementById('top-scroll');
+            const holder = document.querySelector('#swdb-table .tabulator-tableholder');
+            if (!topScroll || !holder) return;
+            topScroll.addEventListener('scroll', () => { holder.scrollLeft = topScroll.scrollLeft; });
+            holder.addEventListener('scroll', () => { topScroll.scrollLeft = holder.scrollLeft; });
+            syncTopScrollWidth();
+            topScroll.style.display = 'block';
+            if (window.ResizeObserver) {
+                const tableEl = document.querySelector('#swdb-table .tabulator-table');
+                if (tableEl) new ResizeObserver(syncTopScrollWidth).observe(tableEl);
+            }
+            window.addEventListener('resize', syncTopScrollWidth);
+        }
+
+        async function loadData() {
+            const res = await fetch('/api/swdb');
+            const data = await res.json();
+
+            table = new Tabulator('#swdb-table', {
+                data,
+                layout: 'fitData',
+                responsiveLayout: false,
+                pagination: true,
+                paginationSize: 300,
+                paginationCounter: 'rows',
+                movableColumns: true,
+                resizableRows: true,
+                initialSort: [ { column: 'url', dir: 'asc' } ],
+                columnDefaults: { resizable: true, minWidth: 120 },
+                columns: [
+                    { title: 'url', field: 'url', width: 220 },
+                    { title: 'in_swdb', field: 'in_swdb', width: 120 },
+                    { title: 'SITE_URL', field: 'SITE_URL', width: 220 },
+                    { title: 'num_site_ids', field: 'num_site_ids', width: 140 },
+                    { title: 'num_account_ids', field: 'num_account_ids', width: 160 },
+                    { title: 'account_ids', field: 'account_ids', width: 220 },
+                    { title: 'site_ids', field: 'site_ids', width: 280 },
+                ],
+            });
+
+            table.on('tableBuilt', setupTopHorizontalScroll);
+            table.on('columnResized', syncTopScrollWidth);
+            table.on('columnMoved', syncTopScrollWidth);
+            table.on('renderComplete', syncTopScrollWidth);
+
+            // Filters
+            document.getElementById('flt-url').addEventListener('input', (e) => table.setFilter('url', 'like', e.target.value));
+            document.getElementById('flt-site-url').addEventListener('input', (e) => table.setFilter('SITE_URL', 'like', e.target.value));
+            document.getElementById('flt-in-swdb').addEventListener('input', (e) => table.setFilter('in_swdb', 'like', e.target.value));
+        }
+
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>

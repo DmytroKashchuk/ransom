@@ -1,0 +1,709 @@
+{% extends 'base.html' %}
+{% block title %}SWDB USA Preview{% endblock %}
+
+{% block extra_css %}
+<link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+<style>
+  body.swdb-preview {
+    background: linear-gradient(180deg, #edf2ff 0%, #f8fafc 25%, #ffffff 100%);
+  }
+
+  .swdb-page {
+    padding: 20px 3vw 40px;
+    min-height: calc(100vh - 64px);
+  }
+
+  .swdb-shell {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .swdb-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .swdb-hero h1 {
+    margin: 0;
+    font-size: clamp(2.1rem, 2.6vw, 2.8rem);
+    color: #0f172a;
+    font-weight: 700;
+  }
+
+  .swdb-hero p {
+    margin: 0;
+    font-size: 1rem;
+    color: #475569;
+    max-width: 900px;
+  }
+
+  .metric-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+  }
+
+  .metric-tile {
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .metric-tile span {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #2563eb;
+    font-weight: 600;
+  }
+
+  .metric-tile strong {
+    font-size: 1.4rem;
+    color: #1e293b;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .data-card,
+  .preview-card {
+    background: #ffffff;
+    border-radius: 18px;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  }
+
+  .data-card {
+    overflow: hidden;
+  }
+
+  .data-card header {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 22px 28px 16px;
+  }
+
+  .data-card header .header-main {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .filter-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 220px;
+  }
+
+  .filter-field label {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+  }
+
+  .filter-field input {
+    padding: 10px 12px;
+    border: 1px solid #cbd5f5;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #0f172a;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .filter-field input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    background: #ffffff;
+  }
+
+  .encoding-card {
+    background: #ffffff;
+    border-radius: 18px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+    padding: 22px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .encoding-card header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .encoding-card h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #0f172a;
+  }
+
+  .encoding-card header p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #475569;
+  }
+
+  .encoding-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .encoding-chip {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.1);
+    border: 1px solid rgba(37, 99, 235, 0.2);
+    min-width: 150px;
+  }
+
+  .encoding-chip strong {
+    font-size: 0.9rem;
+    color: #1e293b;
+    font-weight: 600;
+  }
+
+  .encoding-chip em {
+    font-style: normal;
+    font-size: 0.75rem;
+    color: #475569;
+  }
+
+  .encoding-empty {
+    font-size: 0.9rem;
+    color: #94a3b8;
+  }
+
+  .data-card header h2 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: #0f172a;
+  }
+
+  .data-source {
+    font-size: 0.9rem;
+    color: #475569;
+    background: rgba(15, 23, 42, 0.05);
+    padding: 6px 10px;
+    border-radius: 999px;
+  }
+
+  #table-host {
+    padding: 0 28px 28px;
+  }
+
+  #preview-table {
+    width: 100%;
+  }
+
+  .tabulator {
+    border: 0;
+    border-radius: 16px;
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+  }
+
+  .tabulator .tabulator-tableholder {
+    overflow-y: scroll;
+    overflow-x: auto;
+    scrollbar-gutter: stable both-edges;
+    max-height: 60vh;
+  }
+
+  .tabulator-row.tabulator-selected {
+    background: rgba(59, 130, 246, 0.16) !important;
+  }
+
+  .tabulator-cell.file-cell {
+    color: #2563eb;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .tabulator-cell.file-cell:hover {
+    text-decoration: underline;
+  }
+
+  .preview-card {
+    padding: 24px 28px 28px;
+  }
+
+  .preview-card header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .preview-card h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: #0f172a;
+  }
+
+  .preview-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    font-size: 0.9rem;
+    color: #475569;
+  }
+
+  .preview-meta div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .preview-meta span {
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: #94a3b8;
+  }
+
+  pre.preview-body {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 14px;
+    padding: 18px;
+    font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    max-height: 360px;
+    overflow: scroll;
+    scrollbar-gutter: stable both-edges;
+    white-space: pre;
+  }
+
+  pre.preview-body.empty {
+    background: rgba(15, 23, 42, 0.05);
+    color: #64748b;
+  }
+
+  @media (max-width: 768px) {
+    .swdb-page {
+      padding: 16px 4vw 32px;
+    }
+
+    #table-host {
+      padding: 0 18px 22px;
+    }
+
+    .preview-card {
+      padding: 20px 18px 22px;
+    }
+
+    pre.preview-body {
+      max-height: 300px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block body_class %}swdb-preview{% endblock %}
+
+{% block content %}
+<section class="swdb-page">
+  <div class="swdb-shell">
+    <div class="swdb-hero">
+      <h1>SWDB USA Snapshot Explorer</h1>
+      <p>
+        Browse the technology inventory previews extracted from the Software World Database (SWDB).
+        Each record represents a sampled file captured per year, complete with metadata, quick stats,
+        and an inline data preview.
+      </p>
+    </div>
+
+    <div class="metric-strip">
+      <div class="metric-tile">
+        <span>Collections</span>
+        <strong id="metric-collections">0</strong>
+      </div>
+      <div class="metric-tile">
+        <span>Total Files</span>
+        <strong id="metric-files">0</strong>
+      </div>
+      <div class="metric-tile">
+        <span>Total Size</span>
+        <strong id="metric-size">0 B</strong>
+      </div>
+      <div class="metric-tile">
+        <span>Encoding Types</span>
+        <strong id="metric-encodings">0</strong>
+      </div>
+      <div class="metric-tile">
+        <span>Last Updated</span>
+        <strong id="metric-generated">—</strong>
+      </div>
+    </div>
+
+    <article class="encoding-card">
+      <header>
+        <h3>Encoding Snapshot</h3>
+        <p id="encoding-summary-meta">No encoding data</p>
+      </header>
+      <div class="encoding-tags" id="encoding-summary"></div>
+    </article>
+
+    <article class="data-card">
+      <header>
+        <div class="header-main">
+          <h2>Dataset Inventory</h2>
+          <span class="data-source">Source: data/swdb/swdb_preview_usa.json</span>
+        </div>
+        <div class="filter-controls">
+          <div class="filter-field">
+            <label for="filter-collection-path">Collection Path</label>
+            <input id="filter-collection-path" type="text" placeholder="Filter by collection path" autocomplete="off" />
+          </div>
+          <div class="filter-field">
+            <label for="filter-encoding">Encoding</label>
+            <input id="filter-encoding" type="text" placeholder="Filter by encoding" autocomplete="off" />
+          </div>
+          <div class="filter-field">
+            <label for="filter-country">Country</label>
+            <input id="filter-country" type="text" placeholder="Filter by country" autocomplete="off" />
+          </div>
+          <div class="filter-field">
+            <label for="filter-year">Year</label>
+            <input id="filter-year" type="text" placeholder="Filter by year" autocomplete="off" />
+          </div>
+          <div class="filter-field">
+            <label for="filter-file">File</label>
+            <input id="filter-file" type="text" placeholder="Filter by file name" autocomplete="off" />
+          </div>
+        </div>
+      </header>
+      <div id="table-host">
+        <div id="preview-table"></div>
+      </div>
+    </article>
+
+    <article class="preview-card" id="preview-card">
+      <header>
+        <h2 id="preview-title">Select a file to view its preview</h2>
+        <div class="preview-meta" id="preview-meta"></div>
+      </header>
+      <pre class="preview-body empty" id="preview-body">No file selected. Choose a file from the table above to load its head rows.</pre>
+    </article>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+<script>
+  const metrics = {
+    collections: document.getElementById('metric-collections'),
+    files: document.getElementById('metric-files'),
+    size: document.getElementById('metric-size'),
+    generated: document.getElementById('metric-generated'),
+    encodings: document.getElementById('metric-encodings')
+  };
+
+  const previewTitle = document.getElementById('preview-title');
+  const previewMeta = document.getElementById('preview-meta');
+  const previewBody = document.getElementById('preview-body');
+  const encodingSummary = document.getElementById('encoding-summary');
+  const encodingSummaryMeta = document.getElementById('encoding-summary-meta');
+
+  const filterCollectionInput = document.getElementById('filter-collection-path');
+  const filterEncodingInput = document.getElementById('filter-encoding');
+  const filterCountryInput = document.getElementById('filter-country');
+  const filterYearInput = document.getElementById('filter-year');
+  const filterFileInput = document.getElementById('filter-file');
+
+  let tableInstance = null;
+
+  function formatTitle(field) {
+    if (!field) return '';
+    return field
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (m) => m.toUpperCase());
+  }
+
+  function formatBytes(bytes) {
+    const num = Number(bytes);
+    if (!Number.isFinite(num) || num <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    let value = num;
+    let index = 0;
+    while (value >= 1024 && index < units.length - 1) {
+      value /= 1024;
+      index += 1;
+    }
+    return `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[index]}`;
+  }
+
+  function escapeHTML(str) {
+    if (typeof str !== 'string') return str;
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function renderPreview(data) {
+    if (!data) {
+      previewTitle.textContent = 'Select a file to view its preview';
+      previewMeta.innerHTML = '';
+      previewBody.textContent = 'No file selected. Choose a file from the table above to load its head rows.';
+      previewBody.classList.add('empty');
+      return;
+    }
+
+    const label = data.file_label || data.path_rel || 'File';
+    previewTitle.textContent = `${data.collection || 'Collection'} — ${label}`;
+
+    const detailItems = [
+      { label: 'Path', value: data.full_path || data.path_rel || '—' },
+      { label: 'Size', value: data.size_human || formatBytes(data.size_bytes) },
+      { label: 'Modified', value: data.modified_time || '—' },
+      { label: 'Encoding', value: data.encoding || '—' },
+      { label: 'Rows Reported', value: data.row_count ?? '—' },
+      { label: 'Columns (first line)', value: data.columns_first_line ?? '—' }
+    ];
+
+    previewMeta.innerHTML = detailItems
+      .map((item) => {
+        const value = item.value == null ? '—' : item.value;
+        return `<div><span>${escapeHTML(item.label)}</span>${escapeHTML(String(value))}</div>`;
+      })
+      .join('');
+
+    const previewLines = Array.isArray(data.rows)
+      ? data.rows.join('\n')
+      : (Array.isArray(data.head_lines) ? data.head_lines.join('\n') : 'Preview not available for this file.');
+
+    previewBody.textContent = previewLines;
+    previewBody.classList.toggle('empty', !Array.isArray(data.rows) && !Array.isArray(data.head_lines));
+  }
+
+  function buildColumns(fields) {
+    const hiddenFields = new Set(['rows']);
+    return fields
+      .filter((field) => !hiddenFields.has(field))
+      .map((field) => {
+        const column = {
+          title: formatTitle(field),
+          field,
+          headerTooltip: field,
+          minWidth: 140,
+          widthGrow: 1
+        };
+
+        if (field === 'size_bytes' || field === 'size_mb' || field === 'preview_line_count' || field === 'collection_file_count') {
+          column.sorter = 'number';
+          column.hozAlign = 'right';
+        }
+
+        if (field === 'size_human') {
+          column.hozAlign = 'right';
+        }
+
+        if (field === 'file_label' || field === 'path_rel' || field === 'full_path') {
+          column.formatter = (cell) => {
+            const value = cell.getValue();
+            if (!value) return '—';
+            return `<span class="file-cell">${escapeHTML(String(value))}</span>`;
+          };
+        }
+
+        if (field === 'collection') {
+          column.headerSort = false;
+        }
+
+        return column;
+      });
+  }
+
+  function renderEncodingSummary(entries, totalRecords) {
+    if (!encodingSummary) return;
+
+    if (!entries.length) {
+      encodingSummary.innerHTML = '<span class="encoding-empty">No encoding metadata available.</span>';
+      if (encodingSummaryMeta) {
+        encodingSummaryMeta.textContent = 'No encoding data';
+      }
+      return;
+    }
+
+    const topEntries = entries.slice(0, 6);
+    const chips = topEntries
+      .map(([name, count]) => {
+        const pct = totalRecords ? (count / totalRecords) * 100 : 0;
+        const pctLabel = totalRecords ? `${pct.toFixed(pct >= 10 ? 0 : 1)}%` : '—';
+        return `<span class="encoding-chip"><strong>${escapeHTML(name)}</strong><em>${count} file${count === 1 ? '' : 's'} • ${pctLabel}</em></span>`;
+      })
+      .join('');
+
+    encodingSummary.innerHTML = chips;
+    if (encodingSummaryMeta) {
+      const uniqueCount = entries.length;
+      encodingSummaryMeta.textContent = `${uniqueCount} encoding type${uniqueCount === 1 ? '' : 's'} tracked`;
+    }
+  }
+
+  function updateMetrics(records, generatedAt) {
+    const collectionSet = new Set();
+    let totalBytes = 0;
+    const encodingCounts = new Map();
+
+    records.forEach((rec) => {
+      if (rec.collection) collectionSet.add(rec.collection);
+      const bytes = Number(rec.size_bytes);
+      if (Number.isFinite(bytes)) totalBytes += bytes;
+      const encodingKey = (rec.encoding && String(rec.encoding).trim()) || 'Unknown';
+      encodingCounts.set(encodingKey, (encodingCounts.get(encodingKey) || 0) + 1);
+    });
+
+    metrics.collections.textContent = collectionSet.size;
+    metrics.files.textContent = records.length;
+    metrics.size.textContent = formatBytes(totalBytes);
+    metrics.generated.textContent = generatedAt || '—';
+
+    const encodingEntries = Array.from(encodingCounts.entries()).sort((a, b) => b[1] - a[1]);
+    if (metrics.encodings) {
+      metrics.encodings.textContent = encodingEntries.length;
+    }
+    renderEncodingSummary(encodingEntries, records.length);
+  }
+
+  function applyFilters() {
+    if (!tableInstance) return;
+    const filters = [];
+    const collectionValue = filterCollectionInput ? filterCollectionInput.value.trim() : '';
+    const encodingValue = filterEncodingInput ? filterEncodingInput.value.trim() : '';
+    const countryValue = filterCountryInput ? filterCountryInput.value.trim() : '';
+    const yearValue = filterYearInput ? filterYearInput.value.trim() : '';
+    const fileValue = filterFileInput ? filterFileInput.value.trim() : '';
+
+    if (collectionValue) {
+      filters.push({ field: 'collection_path', type: 'like', value: collectionValue });
+    }
+    if (encodingValue) {
+      filters.push({ field: 'encoding', type: 'like', value: encodingValue });
+    }
+    if (countryValue) {
+      filters.push({ field: 'collection_country', type: 'like', value: countryValue });
+    }
+    if (yearValue) {
+      filters.push({ field: 'collection_year', type: 'like', value: yearValue });
+    }
+    if (fileValue) {
+      filters.push({ field: 'file_name', type: 'like', value: fileValue });
+    }
+
+    if (filters.length) {
+      tableInstance.setFilter(filters);
+    } else {
+      tableInstance.clearFilter();
+    }
+  }
+
+  function setupFilterControls() {
+    if (filterCollectionInput) {
+      filterCollectionInput.addEventListener('input', applyFilters);
+    }
+    if (filterEncodingInput) {
+      filterEncodingInput.addEventListener('input', applyFilters);
+    }
+    if (filterCountryInput) {
+      filterCountryInput.addEventListener('input', applyFilters);
+    }
+    if (filterYearInput) {
+      filterYearInput.addEventListener('input', applyFilters);
+    }
+    if (filterFileInput) {
+      filterFileInput.addEventListener('input', applyFilters);
+    }
+  }
+
+  async function initPreviewPage() {
+    try {
+      const response = await fetch('/api/swdb_preview_usa');
+      const payload = await response.json();
+
+      if (payload.error) {
+        document.getElementById('table-host').innerHTML = `<div style="color:#dc2626;padding:18px;">${escapeHTML(payload.error)}</div>`;
+        return;
+      }
+
+      const fields = Array.isArray(payload.columns) ? payload.columns : [];
+      const data = Array.isArray(payload.records) ? payload.records : [];
+
+      tableInstance = new Tabulator('#preview-table', {
+        data,
+        layout: 'fitColumns',
+        virtualDom: true,
+        height: 'auto',
+        maxHeight: '60vh',
+        selectable: 1,
+        pagination: true,
+        paginationMode: 'local',
+        paginationSize: 10,
+        paginationSizeSelector: [10, 25, 50, 100],
+        placeholder: 'No records to display',
+        columnDefaults: {
+          resizable: true
+        },
+        columns: buildColumns(fields)
+      });
+
+      tableInstance.on('rowClick', (e, row) => {
+        row.select();
+        renderPreview(row.getData());
+      });
+
+      tableInstance.on('tableBuilt', () => {
+        if (data.length) {
+          const first = tableInstance.getRows()[0];
+          if (first) {
+            first.select();
+            renderPreview(first.getData());
+          }
+        }
+      });
+
+      tableInstance.on('rowSelectionChanged', (data) => {
+        if (!data.length) return;
+        renderPreview(data[0]);
+      });
+
+      setupFilterControls();
+      applyFilters();
+      updateMetrics(data, payload.generated_at_utc);
+    } catch (err) {
+      document.getElementById('table-host').innerHTML = `<div style="color:#dc2626;padding:18px;">Failed to load dataset: ${escapeHTML(err.message)}</div>`;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', initPreviewPage);
+</script>
+{% endblock %}
