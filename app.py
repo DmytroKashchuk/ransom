@@ -2,6 +2,7 @@ from flask import Flask, render_template, jsonify
 from markupsafe import Markup
 from datetime import datetime
 import os, json, math
+import numpy as np
 import pandas as pd
 import markdown
 
@@ -22,6 +23,24 @@ def intro_page():
 
 # Path to the CSV file
 CSV_PATH = 'data/ransomed_domains_in_swdb_with_accounts.csv'
+HTTP_ARCHIVE_TECH_CSV = os.path.join(
+    app.root_path,
+    'data',
+    'http_archive',
+    'bq-results-municipalities_grouped_tech_cat_ver.csv'
+)
+HTTP_ARCHIVE_TECH_NO_ROOT_CSV = os.path.join(
+    app.root_path,
+    'data',
+    'http_archive',
+    'bq-results-municipalities_grouped_tech_cat_ver_excluding_root_page.csv'
+)
+HTTP_ARCHIVE_TECH_NO_ROOT_V2_CSV = os.path.join(
+    app.root_path,
+    'data',
+    'http_archive',
+    'bq-results-municipalities_grouped_tech_cat_ver_excluding_root_page_v2.csv'
+)
 
 
 def _format_size(num_bytes):
@@ -41,6 +60,78 @@ def _format_size(num_bytes):
             return f"{num:.2f} {unit}"
         num /= 1024
     return f"{num:.2f} PB"
+
+
+def _clean_for_json(value):
+    if value is None:
+        return None
+    if isinstance(value, (np.generic,)):
+        try:
+            value = value.item()
+        except Exception:
+            value = float(value)
+    if isinstance(value, (pd.Timestamp, datetime)):
+        return value.isoformat()
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return None
+        return float(value)
+    if isinstance(value, (int, str, bool)):
+        return value
+    if isinstance(value, dict):
+        return {k: _clean_for_json(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_clean_for_json(v) for v in value]
+    try:
+        return value if json.dumps(value) else str(value)
+    except Exception:
+        return str(value)
+
+
+def _parse_tech_cat_ver(value):
+    if not isinstance(value, str) or not value.strip():
+        return []
+    items = []
+    for raw in value.split(';'):
+        token = raw.strip()
+        if not token:
+            continue
+        parts = token.split('-')
+        if len(parts) >= 3:
+            name, category = parts[0].strip(), parts[1].strip()
+            version = '-'.join(parts[2:]).strip() or None
+        elif len(parts) == 2:
+            name, category = parts[0].strip(), parts[1].strip()
+            version = None
+        else:
+            name, category, version = token, None, None
+        items.append({
+            'name': name or None,
+            'category': category or None,
+            'version': version,
+        })
+    # Deduplicate while preserving order
+    seen = set()
+    deduped = []
+    for item in items:
+        key = (item.get('name'), item.get('category'), item.get('version'))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def _safe_datetime(val):
+    if val is None:
+        return None
+    try:
+        return datetime.fromisoformat(str(val))
+    except Exception:
+        try:
+            return datetime.strptime(str(val), '%Y-%m-%d')
+        except Exception:
+            return None
 
 @app.route('/')
 def index():
@@ -710,6 +801,396 @@ def get_swdb_regions_by_year():
 def swdb_regions_by_year_page():
     return render_template('swdb_regions_by_year.html')
 
+
+
+# ================= HTTP Archive Technologies =================
+@app.route('/api/http_archive/tech_grouped')
+def get_http_archive_tech_grouped():
+    try:
+        path = HTTP_ARCHIVE_TECH_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        records = []
+        for rec in df.to_dict('records'):
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            tech_list = _parse_tech_cat_ver(rec.get('tech_cat_ver'))
+            rec['tech_count'] = len(tech_list)
+            if tech_list:
+                preview_tokens = []
+                for item in tech_list[:5]:
+                    label = item.get('name') or ''
+                    if item.get('version'):
+                        label = f"{label} ({item['version']})"
+                    preview_tokens.append(label.strip())
+                extra = max(len(tech_list) - len(preview_tokens), 0)
+                preview = ', '.join([p for p in preview_tokens if p])
+                if extra:
+                    preview = f"{preview} (+{extra} more)" if preview else f"+{extra} more"
+                rec['tech_preview'] = preview
+            else:
+                rec['tech_preview'] = ''
+            domain_val = rec.get('domain_name')
+            rec['domain_normalized'] = domain_val.lower().strip() if isinstance(domain_val, str) else None
+            records.append(rec)
+        payload = {
+            'data': records,
+            'columns': list(df.columns) + ['tech_count', 'tech_preview']
+        }
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load HTTP Archive technologies CSV: {e}'}), 500
+
+
+@app.route('/api/http_archive/tech_grouped_no_root')
+def get_http_archive_tech_grouped_no_root():
+    try:
+        path = HTTP_ARCHIVE_TECH_NO_ROOT_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        records = []
+        for rec in df.to_dict('records'):
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            tech_list = _parse_tech_cat_ver(rec.get('tech_cat_ver'))
+            rec['tech_count'] = len(tech_list)
+            if tech_list:
+                preview_tokens = []
+                for item in tech_list[:5]:
+                    label = item.get('name') or ''
+                    if item.get('version'):
+                        label = f"{label} ({item['version']})"
+                    preview_tokens.append(label.strip())
+                extra = max(len(tech_list) - len(preview_tokens), 0)
+                preview = ', '.join([p for p in preview_tokens if p])
+                if extra:
+                    preview = f"{preview} (+{extra} more)" if preview else f"+{extra} more"
+                rec['tech_preview'] = preview
+            else:
+                rec['tech_preview'] = ''
+            domain_val = rec.get('domain_name')
+            rec['domain_normalized'] = domain_val.lower().strip() if isinstance(domain_val, str) else None
+            records.append(rec)
+        payload = {
+            'data': records,
+            'columns': list(df.columns) + ['tech_count', 'tech_preview']
+        }
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load HTTP Archive technologies (no root) CSV: {e}'}), 500
+
+
+@app.route('/api/http_archive/tech_grouped_no_root_v2')
+def get_http_archive_tech_grouped_no_root_v2():
+    try:
+        path = HTTP_ARCHIVE_TECH_NO_ROOT_V2_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        records = []
+        for rec in df.to_dict('records'):
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            tech_list = _parse_tech_cat_ver(rec.get('tech_cat_ver'))
+            rec['tech_count'] = len(tech_list)
+            if tech_list:
+                preview_tokens = []
+                for item in tech_list[:5]:
+                    label = item.get('name') or ''
+                    if item.get('version'):
+                        label = f"{label} ({item['version']})"
+                    preview_tokens.append(label.strip())
+                extra = max(len(tech_list) - len(preview_tokens), 0)
+                preview = ', '.join([p for p in preview_tokens if p])
+                if extra:
+                    preview = f"{preview} (+{extra} more)" if preview else f"+{extra} more"
+                rec['tech_preview'] = preview
+            else:
+                rec['tech_preview'] = ''
+            domain_val = rec.get('domain_name')
+            rec['domain_normalized'] = domain_val.lower().strip() if isinstance(domain_val, str) else None
+            records.append(rec)
+        payload = {
+            'data': records,
+            'columns': list(df.columns) + ['tech_count', 'tech_preview']
+        }
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load HTTP Archive technologies (no root v2) CSV: {e}'}), 500
+
+
+@app.route('/api/http_archive/tech_grouped/<path:domain>')
+def get_http_archive_tech_for_domain(domain):
+    try:
+        path = HTTP_ARCHIVE_TECH_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        if 'domain_name' not in df.columns:
+            return jsonify({'error': 'domain_name column is missing in dataset'}), 400
+        mask = df['domain_name'].astype(str).str.lower() == str(domain).lower()
+        subset = df[mask]
+        if subset.empty:
+            return jsonify({'error': f'No records found for domain {domain}'}), 404
+        subset_records = subset.to_dict('records')
+        cleaned = []
+        for rec in subset_records:
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            cleaned.append(rec)
+        timeline = []
+        for (crawl_date, root_page), group in subset.groupby(['crawl_date', 'root_page'], dropna=False):
+            techs = []
+            for val in group['tech_cat_ver']:
+                techs.extend(_parse_tech_cat_ver(val))
+            seen = set()
+            unique_techs = []
+            for item in techs:
+                key = (item.get('name'), item.get('category'), item.get('version'))
+                if key in seen:
+                    continue
+                seen.add(key)
+                unique_techs.append(item)
+            first = group.iloc[0].to_dict()
+            event = {
+                'crawl_date': crawl_date if crawl_date is not None else '',
+                'root_page': root_page if root_page is not None else '',
+                'technologies': unique_techs,
+                'tech_count': len(unique_techs),
+                'post_title': first.get('post_title'),
+                'link': first.get('Link') or first.get('link'),
+                'group_name': first.get('group_name'),
+                'published': first.get('published'),
+                'start_date': first.get('start_date'),
+                'end_date': first.get('end_date'),
+                'hacked': first.get('hacked'),
+                'population': first.get('population'),
+                'matchid': first.get('Matchid'),
+            }
+            timeline.append(event)
+        timeline.sort(key=lambda ev: (_safe_datetime(ev.get('crawl_date')) or datetime.max, ev.get('root_page') or ''))
+        all_techs = []
+        for ev in timeline:
+            all_techs.extend(ev.get('technologies') or [])
+        seen_overall = set()
+        unique_all = []
+        for item in all_techs:
+            key = (item.get('name'), item.get('category'), item.get('version'))
+            if key in seen_overall:
+                continue
+            seen_overall.add(key)
+            unique_all.append(item)
+        summary = {
+            'domain': subset.iloc[0].get('domain_name'),
+            'post_title': subset.iloc[0].get('post_title'),
+            'group_name': subset.iloc[0].get('group_name'),
+            'link': subset.iloc[0].get('Link') or subset.iloc[0].get('link'),
+            'published': subset.iloc[0].get('published'),
+            'start_date': subset.iloc[0].get('start_date'),
+            'end_date': subset.iloc[0].get('end_date'),
+            'hacked': subset.iloc[0].get('hacked'),
+            'population': subset.iloc[0].get('population'),
+            'total_events': len(timeline),
+            'unique_technologies': len(unique_all),
+        }
+        payload = {
+            'summary': summary,
+            'timeline': timeline,
+        }
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load domain technologies: {e}'}), 500
+
+
+@app.route('/api/http_archive/tech_grouped_no_root/<path:domain>')
+def get_http_archive_tech_no_root_for_domain(domain):
+    try:
+        path = HTTP_ARCHIVE_TECH_NO_ROOT_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        if 'domain_name' not in df.columns:
+            return jsonify({'error': 'domain_name column is missing in dataset'}), 400
+        mask = df['domain_name'].astype(str).str.lower() == str(domain).lower()
+        subset = df[mask]
+        if subset.empty:
+            return jsonify({'error': f'No records found for domain {domain}'}), 404
+        timeline = []
+        all_techs = []
+        for _, row in subset.iterrows():
+            row_dict = row.to_dict()
+            for k, v in list(row_dict.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    row_dict[k] = None
+            techs = _parse_tech_cat_ver(row_dict.get('tech_cat_ver'))
+            all_techs.extend(techs)
+            event = {
+                'published': row_dict.get('published'),
+                'start_date': row_dict.get('start_date'),
+                'end_date': row_dict.get('end_date'),
+                'group_name': row_dict.get('group_name'),
+                'matchid': row_dict.get('Matchid'),
+                'link': row_dict.get('Link') or row_dict.get('link'),
+                'hacked': row_dict.get('hacked'),
+                'population': row_dict.get('population'),
+                'technologies': techs,
+                'tech_count': len(techs),
+            }
+            timeline.append(event)
+        timeline.sort(key=lambda ev: (_safe_datetime(ev.get('published')) or _safe_datetime(ev.get('start_date')) or datetime.max))
+        seen_overall = set()
+        unique_all = []
+        for item in all_techs:
+            key = (item.get('name'), item.get('category'), item.get('version'))
+            if key in seen_overall:
+                continue
+            seen_overall.add(key)
+            unique_all.append(item)
+        first = subset.iloc[0]
+        summary = {
+            'domain': first.get('domain_name'),
+            'post_title': first.get('post_title'),
+            'group_name': first.get('group_name'),
+            'link': first.get('Link') or first.get('link'),
+            'published': first.get('published'),
+            'start_date': first.get('start_date'),
+            'end_date': first.get('end_date'),
+            'hacked': first.get('hacked'),
+            'population': first.get('population'),
+            'total_events': len(timeline),
+            'unique_technologies': len(unique_all),
+        }
+        payload = {'summary': summary, 'timeline': timeline}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load domain technologies (no root): {e}'}), 500
+
+
+@app.route('/api/http_archive/tech_grouped_no_root_v2/<path:domain>')
+def get_http_archive_tech_no_root_v2_for_domain(domain):
+    try:
+        path = HTTP_ARCHIVE_TECH_NO_ROOT_V2_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        if 'domain_name' not in df.columns:
+            return jsonify({'error': 'domain_name column is missing in dataset'}), 400
+        mask = df['domain_name'].astype(str).str.lower() == str(domain).lower()
+        subset = df[mask]
+        if subset.empty:
+            return jsonify({'error': f'No records found for domain {domain}'}), 404
+        timeline = []
+        all_techs = []
+        for _, row in subset.iterrows():
+            row_dict = row.to_dict()
+            for k, v in list(row_dict.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    row_dict[k] = None
+            techs = _parse_tech_cat_ver(row_dict.get('tech_cat_ver'))
+            all_techs.extend(techs)
+            event = {
+                'crawl_date': row_dict.get('crawl_date'),
+                'published': row_dict.get('published'),
+                'start_date': row_dict.get('start_date'),
+                'end_date': row_dict.get('end_date'),
+                'group_name': row_dict.get('group_name'),
+                'matchid': row_dict.get('Matchid'),
+                'link': row_dict.get('Link') or row_dict.get('link'),
+                'hacked': row_dict.get('hacked'),
+                'population': row_dict.get('population'),
+                'technologies': techs,
+                'tech_count': len(techs),
+            }
+            timeline.append(event)
+        timeline.sort(key=lambda ev: (_safe_datetime(ev.get('crawl_date')) or _safe_datetime(ev.get('published')) or _safe_datetime(ev.get('start_date')) or datetime.max))
+        seen_overall = set()
+        unique_all = []
+        for item in all_techs:
+            key = (item.get('name'), item.get('category'), item.get('version'))
+            if key in seen_overall:
+                continue
+            seen_overall.add(key)
+            unique_all.append(item)
+        first = subset.iloc[0]
+        summary = {
+            'domain': first.get('domain_name'),
+            'post_title': first.get('post_title'),
+            'group_name': first.get('group_name'),
+            'link': first.get('Link') or first.get('link'),
+            'published': first.get('published'),
+            'start_date': first.get('start_date'),
+            'end_date': first.get('end_date'),
+            'crawl_date_first': subset['crawl_date'].iloc[0] if 'crawl_date' in subset.columns else None,
+            'crawl_date_last': subset['crawl_date'].iloc[-1] if 'crawl_date' in subset.columns else None,
+            'hacked': first.get('hacked'),
+            'population': first.get('population'),
+            'total_events': len(timeline),
+            'unique_technologies': len(unique_all),
+        }
+        payload = {'summary': summary, 'timeline': timeline}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load domain technologies (no root v2): {e}'}), 500
+
+
+@app.route('/http_archive/technologies')
+def http_archive_technologies_page():
+    return render_template('http_archive_technologies.html')
+
+
+@app.route('/http_archive/technologies/<path:domain>')
+def http_archive_technologies_timeline_page(domain):
+    return render_template('http_archive_timeline.html', domain=domain)
+
+
+@app.route('/http_archive/technologies_no_root')
+def http_archive_technologies_no_root_page():
+    return render_template('http_archive_technologies_no_root.html')
+
+
+@app.route('/http_archive/technologies_no_root/<path:domain>')
+def http_archive_technologies_no_root_timeline_page(domain):
+    return render_template('http_archive_timeline_no_root.html', domain=domain)
+
+
+@app.route('/http_archive/technologies_no_root_v2')
+def http_archive_technologies_no_root_v2_page():
+    return render_template('http_archive_technologies_no_root_v2.html')
+
+
+@app.route('/http_archive/technologies_no_root_v2/<path:domain>')
+def http_archive_technologies_no_root_v2_timeline_page(domain):
+    return render_template('http_archive_timeline_no_root_v2.html', domain=domain)
 
 
 

@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block title %}Work in Progress · Ransomware Atlas{% endblock %}
+
+{% block extra_css %}
+<style>
+  .wip-hero {
+    min-height: 60vh;
+    display: grid;
+    place-items: center;
+    padding: 2rem;
+    text-align: center;
+  }
+  .wip-card {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    padding: 2rem 2.5rem;
+    max-width: 820px;
+    width: 100%;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #e6e6e6;
+  }
+  .wip-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .4rem .75rem;
+    border-radius: 999px;
+    font-size: .875rem;
+    letter-spacing: .02em;
+    color: #111;
+    background: linear-gradient(135deg, #ffd166, #fca311);
+    font-weight: 600;
+  }
+  .wip-title { font-size: clamp(1.6rem, 2.4vw + 1rem, 2.4rem); margin: 1rem 0 .5rem; }
+  .wip-sub { opacity: .85; }
+  .dots { display: inline-flex; }
+  .dot { width: 6px; height: 6px; margin: 0 3px; border-radius: 50%; background: currentColor; opacity: .35; animation: pulse 1.4s infinite; }
+  .dot:nth-child(2) { animation-delay: .2s; }
+  .dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes pulse { 0%, 60%, 100% { opacity: .35 } 30% { opacity: 1 } }
+  .cta-row { margin-top: 1.25rem; display: flex; flex-wrap: wrap; gap: .75rem; justify-content: center; }
+  .btn-soft { color: #fff; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); padding: .6rem .9rem; border-radius: 10px; text-decoration: none; }
+  .btn-soft:hover { background: rgba(255,255,255,.12); }
+</style>
+{% endblock %}
+
+{% block content %}
+  <section class="wip-hero container">
+    <div class="wip-card">
+      <span class="wip-badge">
+        <span class="bi bi-tools"></span>
+        Work in progress
+        <span class="dots" aria-hidden="true">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </span>
+      </span>
+      <h1 class="wip-title">We're building this page right now</h1>
+      <p class="wip-sub">Thanks for your patience while we wire things up. Check back soon — or head to the other sections in the meantime.</p>
+      <div class="cta-row">
+        <a class="btn-soft" href="/">Back to Home</a>
+        <a class="btn-soft" href="/intro">About the project</a>
+      </div>
+      <div class="mt-3" style="opacity:.7; font-size:.9rem;">
+        Timestamp: {{ now or (cycler("") and "") }}
+      </div>
+    </div>
+  </section>
+{% endblock %}
