@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Muni Tech Jaccard Similarity</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:#0f172a; color:#0b1220; }
+    .page { width:100%; max-width:100%; padding:18px 20px 60px; }
+    .panel { background:#ffffff; border-radius:16px; padding:22px 24px 30px; box-shadow:0 12px 32px -10px rgba(0,0,0,0.32); }
+    .headline { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:flex-end; margin:0 0 14px; }
+    .headline h1 { margin:0; font-size:1.85rem; color:#0f172a; }
+    .stats { display:flex; flex-wrap:wrap; gap:14px; margin:6px 0 18px; }
+    .stat { background:#f1f5f9; padding:12px 14px; border-radius:12px; min-width:150px; font-size:13px; line-height:1.35; box-shadow:inset 0 1px 0 #fff; }
+    .stat strong { display:block; font-size:22px; color:#0f172a; }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 14px; }
+    .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; min-width:170px; font-size:14px; background:#f8fafc; }
+    .filter-input:focus { outline:2px solid #6366f1; outline-offset:1px; }
+    .btn { padding:10px 14px; border-radius:10px; border:1px solid #6366f1; background:#6366f1; color:#fff; cursor:pointer; font-weight:600; }
+    .btn-alt { background:#475569; border-color:#475569; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; display:none; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#f1f5f9; }
+    .tabulator-col-title { font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.4px; }
+    .domain-link { color:#0f172a; font-weight:600; text-decoration:underline; text-decoration-thickness:2px; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="page">
+    <div class="panel">
+      <div class="headline">
+        <h1>Muni Tech Jaccard Similarity</h1>
+        <button id="btn-export" class="btn" type="button">Download CSV</button>
+      </div>
+      <div class="stats" id="stats-bar">
+        <div class="stat">Rows<br><strong id="stat-rows">0</strong></div>
+        <div class="stat">Unique links<br><strong id="stat-links">0</strong></div>
+        <div class="stat">Hacked rows<br><strong id="stat-hacked">0</strong></div>
+        <div class="stat">Avg jaccard (1m before)<br><strong id="stat-avg-before">0</strong></div>
+        <div class="stat">Avg jaccard (1m after)<br><strong id="stat-avg-after">0</strong></div>
+      </div>
+      <div class="filters">
+        <input id="flt-link" class="filter-input" placeholder="Link contains" />
+        <input id="flt-tech" class="filter-input" placeholder="Tech contains" />
+        <select id="sel-hacked" class="filter-input">
+          <option value="">Hacked: All</option>
+          <option value="yes">Hacked: Yes</option>
+          <option value="no">Hacked: No</option>
+        </select>
+        <input id="flt-min-before" class="filter-input" type="number" step="0.01" min="0" max="1" placeholder="Min jaccard 1m before" />
+        <input id="flt-min-after" class="filter-input" type="number" step="0.01" min="0" max="1" placeholder="Min jaccard 1m after" />
+        <button id="btn-reset" class="btn-alt btn" type="button">Reset</button>
+      </div>
+      <div id="top-scroll" class="top-scroll"><div id="top-scroll-spacer"></div></div>
+      <div id="tech-table"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let payload=null;
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#tech-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#tech-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#tech-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+    function numFmt(val){ if(val===null||val===undefined||val==='') return ''; const num=Number(val); if(Number.isNaN(num)) return val; return num.toFixed(3); }
+    function linkFormatter(cell){ const v=cell.getValue(); if(!v) return '-'; const safe=v.replace(/"/g,'&quot;'); return `<a class="domain-link" href="${safe}" target="_blank" rel="noopener">${v}</a>`; }
+    function buildTable(data){
+      table=new Tabulator('#tech-table',{ data, layout:'fitData', pagination:true, paginationSize:200, movableColumns:true, columnDefaults:{resizable:true,minWidth:140}, columns:[
+        {title:'Link', field:'Link', width:240, formatter:linkFormatter},
+        {title:'Hacked', field:'Hacked', width:100},
+        {title:'Jaccard 4m before', field:'jaccard_attack_4m_before', width:150, formatter:cell=>numFmt(cell.getValue())},
+        {title:'Jaccard 3m before', field:'jaccard_attack_3m_before', width:150, formatter:cell=>numFmt(cell.getValue())},
+        {title:'Jaccard 2m before', field:'jaccard_attack_2m_before', width:150, formatter:cell=>numFmt(cell.getValue())},
+        {title:'Jaccard 1m before', field:'jaccard_attack_1m_before', width:150, formatter:cell=>numFmt(cell.getValue())},
+        {title:'Jaccard 1m after', field:'jaccard_attack_1m_after', width:150, formatter:cell=>numFmt(cell.getValue())},
+        {title:'Jaccard 2m after', field:'jaccard_attack_2m_after', width:150, formatter:cell=>numFmt(cell.getValue())},
+        {title:'Jaccard 3m after', field:'jaccard_attack_3m_after', width:150, formatter:cell=>numFmt(cell.getValue())},
+        {title:'Jaccard 4m after', field:'jaccard_attack_4m_after', width:150, formatter:cell=>numFmt(cell.getValue())},
+        {title:'Attack month tech', field:'attack_month_tech', width:240},
+        {title:'1m before tech', field:'1_m_before', width:220},
+        {title:'2m before tech', field:'2_m_before', width:220},
+        {title:'3m before tech', field:'3_m_before', width:220},
+        {title:'4m before tech', field:'4_m_before', width:220},
+        {title:'1m after tech', field:'1_m_after_tech', width:220},
+        {title:'2m after tech', field:'2_m_after_tech', width:220},
+        {title:'3m after tech', field:'3_m_after_tech', width:220},
+        {title:'4m after tech', field:'4_m_after_tech', width:220},
+        {title:'1m before dropped', field:'1_m_before_tech_dropped', width:220},
+        {title:'1m before added', field:'1_m_before_tech_added', width:220},
+        {title:'2m before dropped', field:'2_m_before_tech_dropped', width:220},
+        {title:'2m before added', field:'2_m_before_tech_added', width:220},
+        {title:'3m before dropped', field:'3_m_before_tech_dropped', width:220},
+        {title:'3m before added', field:'3_m_before_tech_added', width:220},
+        {title:'4m before dropped', field:'4_m_before_tech_dropped', width:220},
+        {title:'4m before added', field:'4_m_before_tech_added', width:220},
+        {title:'1m after dropped', field:'1_m_after_tech_dropped', width:220},
+        {title:'1m after added', field:'1_m_after_tech_added', width:220},
+        {title:'2m after dropped', field:'2_m_after_tech_dropped', width:220},
+        {title:'2m after added', field:'2_m_after_tech_added', width:220},
+        {title:'3m after dropped', field:'3_m_after_tech_dropped', width:220},
+        {title:'3m after added', field:'3_m_after_tech_added', width:220},
+        {title:'4m after dropped', field:'4_m_after_tech_dropped', width:220},
+        {title: 'Average jaccard before attack', field:'average_jaccard_before_attack', width:220},
+        {title: 'Average jaccard after attack', field:'average_jaccard_after_attack', width:220},
+      ], });
+      table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); });
+      table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData())));
+      table.on('columnResized',syncTopScrollWidth);
+      table.on('columnMoved',syncTopScrollWidth);
+      table.on('renderComplete',syncTopScrollWidth);
+    }
+    function truthyHacked(val){ const v=String(val||'').trim().toLowerCase(); return ['1','true','yes','y','t'].includes(v); }
+    function collectTechPool(row){ const parts=[row.attack_month_tech,row['1_m_before'],row['2_m_before'],row['3_m_before'],row['4_m_before'],row['1_m_after_tech'],row['2_m_after_tech'],row['3_m_after_tech'],row['4_m_after_tech'],row['1_m_before_tech_dropped'],row['1_m_before_tech_added'],row['2_m_before_tech_dropped'],row['2_m_before_tech_added'],row['3_m_before_tech_dropped'],row['3_m_before_tech_added'],row['4_m_before_tech_dropped'],row['4_m_before_tech_added'],row['1_m_after_tech_dropped'],row['1_m_after_tech_added'],row['2_m_after_tech_dropped'],row['2_m_after_tech_added'],row['3_m_after_tech_dropped'],row['3_m_after_tech_added'],row['4_m_after_tech_dropped']];
+      return parts.filter(Boolean).join(' | ').toLowerCase();
+    }
+    function applyFilters(){
+      const link=document.getElementById('flt-link').value.trim().toLowerCase();
+      const tech=document.getElementById('flt-tech').value.trim().toLowerCase();
+      const hacked=document.getElementById('sel-hacked').value;
+      const minBeforeRaw=document.getElementById('flt-min-before').value.trim();
+      const minAfterRaw=document.getElementById('flt-min-after').value.trim();
+      const minBefore=minBeforeRaw===''? null: parseFloat(minBeforeRaw);
+      const minAfter=minAfterRaw===''? null: parseFloat(minAfterRaw);
+      table.setFilter(row=>{
+        if(link && !String(row.Link||'').toLowerCase().includes(link)) return false;
+        if(tech){ const pool=collectTechPool(row); if(!pool.includes(tech)) return false; }
+        if(hacked==='yes' && !truthyHacked(row.Hacked)) return false;
+        if(hacked==='no' && truthyHacked(row.Hacked)) return false;
+        if(minBefore!==null){ const v=Number(row.jaccard_attack_1m_before); if(Number.isNaN(v) || v<minBefore) return false; }
+        if(minAfter!==null){ const v=Number(row.jaccard_attack_1m_after); if(Number.isNaN(v) || v<minAfter) return false; }
+        return true;
+      });
+    }
+    function attachFilters(){
+      ['flt-link','flt-tech','flt-min-before','flt-min-after'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el) return;
+        const evt=id.includes('min-')? 'change':'input';
+        el.addEventListener(evt,applyFilters);
+      });
+      const hackedSel=document.getElementById('sel-hacked');
+      if(hackedSel) hackedSel.addEventListener('change',applyFilters);
+      document.getElementById('btn-reset').addEventListener('click',()=>{
+        ['flt-link','flt-tech','flt-min-before','flt-min-after'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+        const hackedSel=document.getElementById('sel-hacked'); if(hackedSel) hackedSel.value='';
+        table.clearFilter();
+        updateStats(table.getData());
+      });
+      document.getElementById('btn-export').addEventListener('click',()=>{
+        const visible=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean);
+        table.download('csv','muni_tech_jaccard_similarity_attack.csv',{columns:visible,rowRange:'active'});
+      });
+    }
+    function updateStats(data){
+      const rows=data.length;
+      const uniqueLinks=new Set(data.map(r=>r.Link).filter(Boolean));
+      const hackedRows=data.filter(r=>truthyHacked(r.Hacked)).length;
+      const beforeVals=data.map(r=>Number(r.jaccard_attack_1m_before)).filter(v=>Number.isFinite(v));
+      const afterVals=data.map(r=>Number(r.jaccard_attack_1m_after)).filter(v=>Number.isFinite(v));
+      const avgBefore=beforeVals.length? (beforeVals.reduce((a,b)=>a+b,0)/beforeVals.length).toFixed(3):'0';
+      const avgAfter=afterVals.length? (afterVals.reduce((a,b)=>a+b,0)/afterVals.length).toFixed(3):'0';
+      document.getElementById('stat-rows').textContent=rows;
+      document.getElementById('stat-links').textContent=uniqueLinks.size;
+      document.getElementById('stat-hacked').textContent=hackedRows;
+      document.getElementById('stat-avg-before').textContent=avgBefore;
+      document.getElementById('stat-avg-after').textContent=avgAfter;
+    }
+    async function init(){
+      const res=await fetch('/api/http_archive/muni_tech_jaccard_similarity_attack');
+      const data=await res.json();
+      if(data.error){
+        document.getElementById('tech-table').innerHTML='<div style="color:#dc2626; padding:18px;">'+data.error+'</div>';
+        return;
+      }
+      payload=data;
+      buildTable(data.data||data);
+      attachFilters();
+    }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

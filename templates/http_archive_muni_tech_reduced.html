@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Muni Tech Reduced</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:#0f172a; color:#0b1220; }
+    .page { width:100%; max-width:100%; padding:18px 20px 60px; }
+    .panel { background:#ffffff; border-radius:16px; padding:22px 24px 30px; box-shadow:0 12px 32px -10px rgba(0,0,0,0.32); }
+    .headline { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:flex-end; margin:0 0 14px; }
+    .headline h1 { margin:0; font-size:1.85rem; color:#0f172a; }
+    .stats { display:flex; flex-wrap:wrap; gap:14px; margin:6px 0 18px; }
+    .stat { background:#f1f5f9; padding:12px 14px; border-radius:12px; min-width:150px; font-size:13px; line-height:1.35; box-shadow:inset 0 1px 0 #fff; }
+    .stat strong { display:block; font-size:22px; color:#0f172a; }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 14px; }
+    .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; min-width:170px; font-size:14px; background:#f8fafc; }
+    .filter-input:focus { outline:2px solid #6366f1; outline-offset:1px; }
+    .btn { padding:10px 14px; border-radius:10px; border:1px solid #6366f1; background:#6366f1; color:#fff; cursor:pointer; font-weight:600; }
+    .btn-alt { background:#475569; border-color:#475569; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; display:none; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#f1f5f9; }
+    .tabulator-col-title { font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.4px; }
+    .domain-link { color:#0f172a; font-weight:600; text-decoration:underline; text-decoration-thickness:2px; }
+    .match-link { color:#0f172a; font-weight:600; text-decoration:underline; text-decoration-thickness:2px; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="page">
+    <div class="panel">
+      <div class="headline">
+        <h1>Muni Tech Reduced</h1>
+        <button id="btn-export" class="btn" type="button">Download CSV</button>
+      </div>
+      <div class="stats" id="stats-bar">
+        <div class="stat">Rows<br><strong id="stat-rows">0</strong></div>
+        <div class="stat">Domains<br><strong id="stat-domains">0</strong></div>
+        <div class="stat">Match IDs<br><strong id="stat-matchids">0</strong></div>
+        <div class="stat">Hacked domains<br><strong id="stat-hacked-domains">0</strong></div>
+        <div class="stat">Non-hacked domains<br><strong id="stat-nonhacked-domains">0</strong></div>
+        <div class="stat">Technologies<br><strong id="stat-techs">0</strong></div>
+        <div class="stat">Categories<br><strong id="stat-cats">0</strong></div>
+        <div class="stat">Tech + Version<br><strong id="stat-techvers">0</strong></div>
+      </div>
+      <div class="filters">
+        <input id="flt-domain" class="filter-input" placeholder="Domain" />
+        <input id="flt-group" class="filter-input" placeholder="Group" />
+        <input id="flt-tech" class="filter-input" placeholder="Technology contains" />
+        <select id="sel-tech" class="filter-input">
+          <option value="">Technology (exact)</option>
+        </select>
+        <input id="flt-category" class="filter-input" placeholder="Category contains" />
+        <select id="sel-category" class="filter-input">
+          <option value="">Category (exact)</option>
+        </select>
+        <input id="flt-version" class="filter-input" placeholder="Version contains" />
+        <select id="sel-tech-ver" class="filter-input">
+          <option value="">Tech + version (exact)</option>
+        </select>
+        <input id="flt-match" class="filter-input" placeholder="Match ID" />
+        <input id="flt-crawl" class="filter-input" type="date" placeholder="Crawl date" />
+        <input id="flt-months-before" class="filter-input" type="number" min="0" placeholder="Months before (e.g. 3)" />
+        <input id="flt-months-after" class="filter-input" type="number" min="0" placeholder="Months after (e.g. 3)" />
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+          <input id="chk-include-between" type="checkbox" /> Include months in between
+        </label>
+        <button id="btn-toggle-tech-cols" class="btn" type="button" style="background:#0ea5e9;border-color:#0ea5e9;">Hide tech cols</button>
+        <select id="pivot-mode" class="filter-input" style="min-width:170px;">
+          <option value="tech">Pivot: site vs tech</option>
+          <option value="cat">Pivot: site vs category</option>
+          <option value="tech_ver">Pivot: site vs tech+ver</option>
+        </select>
+        <button id="btn-download-pivot" class="btn" type="button" style="background:#f97316;border-color:#f97316;">Download pivot CSV</button>
+        <button id="btn-reset" class="btn-alt btn" type="button">Reset</button>
+      </div>
+      <div id="top-scroll" class="top-scroll"><div id="top-scroll-spacer"></div></div>
+      <div id="tech-table"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let payload=null; let techColsVisible=true;
+    let fullData=[]; let uniqueData=[];
+    const TECH_COLS=['technology','categories','versions'];
+    function monthsDiff(publishedStr, crawlStr){
+      if(!publishedStr || !crawlStr) return null;
+      const pub=new Date(publishedStr); const crawl=new Date(crawlStr);
+      if(Number.isNaN(pub.getTime()) || Number.isNaN(crawl.getTime())) return null;
+      const yDiff=crawl.getFullYear()-pub.getFullYear();
+      const mDiff=crawl.getMonth()-pub.getMonth();
+      return yDiff*12 + mDiff;
+    }
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#tech-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#tech-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#tech-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+    function updateStats(data){
+      const rows=data.length;
+      const domainStatus=new Map(); // domain -> hacked flag
+      const techSet=new Set();
+      const catSet=new Set();
+      const techVerSet=new Set();
+      data.forEach(r=>{
+        const d=(r.domain_name||'').trim();
+        if(d){
+          const val=String(r.hacked??'').trim().toLowerCase();
+          const isHacked=['1','true','yes','y','t'].includes(val);
+          if(!domainStatus.has(d)) domainStatus.set(d, isHacked);
+          else if(isHacked) domainStatus.set(d, true); // once hacked, stay hacked
+        }
+        splitValues(r.technology||'').forEach(v=>techSet.add(v.toLowerCase()));
+        splitValues(r.categories||'').forEach(v=>catSet.add(v.toLowerCase()));
+        const t=String(r.technology||'').trim();
+        if(t){
+          const v=String(r.versions||'').trim();
+          techVerSet.add(`${t.toLowerCase()}|${v.toLowerCase()}`);
+        }
+      });
+      let hackedCount=0, nonHackedCount=0;
+      domainStatus.forEach(flag=>{ flag ? hackedCount++ : nonHackedCount++; });
+      const matchids=new Set(data.map(r=>r.Matchid).filter(v=>v!==null && v!==undefined && v!==''));
+      document.getElementById('stat-rows').textContent=rows;
+      document.getElementById('stat-domains').textContent=domainStatus.size;
+      document.getElementById('stat-matchids').textContent=matchids.size;
+      const hackedEl=document.getElementById('stat-hacked-domains');
+      const nonHackedEl=document.getElementById('stat-nonhacked-domains');
+      if(hackedEl) hackedEl.textContent=hackedCount;
+      if(nonHackedEl) nonHackedEl.textContent=nonHackedCount;
+      const techEl=document.getElementById('stat-techs');
+      const catEl=document.getElementById('stat-cats');
+      const techVerEl=document.getElementById('stat-techvers');
+      if(techEl) techEl.textContent=techSet.size;
+      if(catEl) catEl.textContent=catSet.size;
+      if(techVerEl) techVerEl.textContent=techVerSet.size;
+    }
+    function domainFormatter(cell){
+      const v=cell.getValue();
+      if(!v) return '-';
+      const target=`/http_archive/muni_tech_reduced/${encodeURIComponent(v)}`;
+      return `<a class="domain-link" href="${target}" target="_blank" rel="noopener">${v}</a>`;
+    }
+    function matchFormatter(cell){
+      const v=cell.getValue();
+      if(v===null || v===undefined || v==='') return '-';
+      const target=`/http_archive/muni_tech_reduced_matchpair/${encodeURIComponent(v)}`;
+      return `<a class="match-link" href="${target}" target="_blank" rel="noopener">${v}</a>`;
+    }
+    function buildTable(data){ table=new Tabulator('#tech-table',{ data, layout:'fitData', pagination:true, paginationSize:300, movableColumns:true, columnDefaults:{resizable:true,minWidth:140}, columns:[
+      {title:'Domain', field:'domain_name', width:210, formatter:domainFormatter},
+      {title:'Match ID', field:'Matchid', width:120, formatter:matchFormatter},
+      {title:'Post Title', field:'post_title', width:260},
+      {title:'Group', field:'group_name', width:140},
+      {title:'Published', field:'published', width:130},
+      {title:'Start Date', field:'start_date', width:130},
+      {title:'End Date', field:'end_date', width:130},
+      {title:'Crawl Date', field:'crawl_date', width:130},
+      {title:'Hacked', field:'hacked', width:110},
+      {title:'Population', field:'population', width:120},
+      {title:'Link', field:'Link', width:160},
+      {title:'Technology', field:'technology', width:200},
+      {title:'Categories', field:'categories', width:220},
+      {title:'Versions', field:'versions', width:160},
+    ], });
+      table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); });
+      table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData())));
+      table.on('columnResized',syncTopScrollWidth);
+      table.on('columnMoved',syncTopScrollWidth);
+      table.on('renderComplete',syncTopScrollWidth);
+    }
+    function applyFilters(){
+      const domain=document.getElementById('flt-domain').value.trim().toLowerCase();
+      const group=document.getElementById('flt-group').value.trim().toLowerCase();
+      const tech=document.getElementById('flt-tech').value.trim().toLowerCase();
+      const techExact=document.getElementById('sel-tech').value.trim().toLowerCase();
+      const category=document.getElementById('flt-category').value.trim().toLowerCase();
+      const categoryExact=document.getElementById('sel-category').value.trim().toLowerCase();
+      const version=document.getElementById('flt-version').value.trim().toLowerCase();
+      const techVerExact=document.getElementById('sel-tech-ver').value.trim().toLowerCase();
+      const match=document.getElementById('flt-match').value.trim().toLowerCase();
+      const crawl=document.getElementById('flt-crawl').value.trim();
+      const beforeRaw=document.getElementById('flt-months-before').value.trim();
+      const afterRaw=document.getElementById('flt-months-after').value.trim();
+      const includeBetween=document.getElementById('chk-include-between').checked;
+      const beforeVal=beforeRaw===''? null: parseInt(beforeRaw,10);
+      const afterVal=afterRaw===''? null: parseInt(afterRaw,10);
+      table.setFilter(row=>{
+        if(domain && !(String(row.domain_name||'').toLowerCase().includes(domain))) return false;
+        if(group && !(String(row.group_name||'').toLowerCase().includes(group))) return false;
+        if(tech && !(String(row.technology||'').toLowerCase().includes(tech))) return false;
+        if(techExact && String(row.technology||'').toLowerCase()!==techExact) return false;
+        if(category && !(String(row.categories||'').toLowerCase().includes(category))) return false;
+        if(categoryExact && String(row.categories||'').toLowerCase()!==categoryExact) return false;
+        if(version && !(String(row.versions||'').toLowerCase().includes(version))) return false;
+        if(techVerExact){
+          const t=String(row.technology||'').toLowerCase().trim();
+          const v=String(row.versions||'').toLowerCase().trim();
+          const combo=t? `${t}|${v}` : '';
+          if(combo!==techVerExact) return false;
+        }
+        if(match && !(String(row.Matchid||'').toLowerCase().includes(match))) return false;
+        if(crawl && String(row.crawl_date||'')!==crawl) return false;
+        if(beforeVal!==null || afterVal!==null){
+          const diff=monthsDiff(row.published, row.crawl_date);
+          if(diff===null) return false;
+          const inBefore=beforeVal!==null && diff===-beforeVal;
+          const inAfter=afterVal!==null && diff===afterVal;
+          if(includeBetween){
+            const minBound=beforeVal!==null? -beforeVal: null;
+            const maxBound=afterVal!==null? afterVal: null;
+            if(minBound!==null && diff<minBound) return false;
+            if(maxBound!==null && diff>maxBound) return false;
+          } else {
+            const hasBefore=beforeVal!==null;
+            const hasAfter=afterVal!==null;
+            if(hasBefore && hasAfter){
+              if(!(inBefore || inAfter)) return false;
+            } else if(hasBefore){
+              if(!inBefore) return false;
+            } else if(hasAfter){
+              if(!inAfter) return false;
+            }
+          }
+        }
+        return true;
+      });
+    }
+    function attachFilters(){
+      ['flt-domain','flt-group','flt-tech','flt-category','flt-version','flt-match','flt-crawl','flt-months-before','flt-months-after'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el) return;
+        const evt=id==='flt-crawl'?'change':'input';
+        el.addEventListener(evt,applyFilters);
+      });
+      ['sel-tech','sel-category','sel-tech-ver'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el) return;
+        el.addEventListener('change',applyFilters);
+      });
+      const includeBetweenEl=document.getElementById('chk-include-between');
+      if(includeBetweenEl) includeBetweenEl.addEventListener('change',applyFilters);
+      document.getElementById('btn-reset').addEventListener('click',()=>{
+        ['flt-domain','flt-group','flt-tech','flt-category','flt-version','flt-match','flt-crawl','flt-months-before','flt-months-after'].forEach(id=>{
+          const el=document.getElementById(id);
+          if(el) el.value='';
+        });
+        ['sel-tech','sel-category','sel-tech-ver'].forEach(id=>{
+          const el=document.getElementById(id);
+          if(el) el.value='';
+        });
+        const includeBetweenEl=document.getElementById('chk-include-between');
+        if(includeBetweenEl) includeBetweenEl.checked=false;
+        setTechColsVisible(true);
+        table.clearFilter();
+        updateStats(table.getData());
+      });
+      const toggleBtn=document.getElementById('btn-toggle-tech-cols');
+      if(toggleBtn){
+        toggleBtn.addEventListener('click',()=>{
+          setTechColsVisible(!techColsVisible);
+        });
+      }
+      document.getElementById('btn-export').addEventListener('click',()=>{
+        const visible=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean);
+        table.download('csv','muni_tech_reduced.csv',{columns:visible,rowRange:'active'});
+      });
+      const pivotBtn=document.getElementById('btn-download-pivot');
+      const pivotSelect=document.getElementById('pivot-mode');
+      if(pivotBtn && pivotSelect){
+          pivotBtn.addEventListener('click', ()=>{
+            const mode=pivotSelect.value;
+            const rows=table? table.getRows('active') : [];
+            const data=rows.map(r=>r.getData());
+            const csv=buildPivotCSV(mode, data);
+            if(!csv){ alert('No data available for pivot'); return; }
+            const blob=new Blob([csv],{type:'text/csv'});
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement('a');
+            a.href=url;
+            a.download=`muni_tech_pivot_${mode}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          });
+      }
+    }
+    function setTechColsVisible(show){
+      techColsVisible=!!show;
+      if(!table) return;
+      const dataset=techColsVisible? fullData: uniqueData;
+      table.setData(dataset).then(()=>{
+        applyFilters();
+        updateStats(table.getData());
+        TECH_COLS.forEach(f=>{ const col=table.getColumn(f); if(col){ show?col.show():col.hide(); } });
+        setTimeout(syncTopScrollWidth,0);
+      });
+      const btn=document.getElementById('btn-toggle-tech-cols');
+      if(btn) btn.textContent=techColsVisible?'Hide tech cols':'Show tech cols';
+    }
+    function buildPivotCSV(mode, data){
+      if(!Array.isArray(data) || !data.length) return '';
+      const validModes=new Set(['tech','cat','tech_ver']);
+      if(!validModes.has(mode)) mode='tech';
+      const siteMap=new Map(); // site -> {feats:Set, hacked:Set, group:Set}
+      const cols=new Set();
+      const featureFor=row=>{
+        if(mode==='tech') return row.technology;
+        if(mode==='cat') return row.categories;
+        const t=row.technology; const v=row.versions;
+        if(t==null || t==='') return '';
+        return `${String(t).trim()}|${v==null?'':String(v).trim()}`;
+      };
+      for(const row of data){
+        const site=row.Link;
+        if(!site) continue;
+        const feat=featureFor(row);
+        if(!feat || String(feat).trim()==='') continue;
+        const key=String(site).trim();
+        const fStr=String(feat).trim();
+        cols.add(fStr);
+        if(!siteMap.has(key)) siteMap.set(key,{feats:new Set(), hacked:new Set(), group:new Set()});
+        const entry=siteMap.get(key);
+        entry.feats.add(fStr);
+        if(row.hacked!=null && row.hacked!=='') entry.hacked.add(String(row.hacked).trim());
+        if(row.group_name!=null && row.group_name!=='') entry.group.add(String(row.group_name).trim());
+      }
+      if(cols.size===0 || siteMap.size===0) return '';
+      const colList=Array.from(cols).sort((a,b)=>a.localeCompare(b));
+      const header=['website','hacked','group',...colList];
+      const lines=[header.map(csvEscape).join(',')];
+      const pickOne=setVal=>{ if(!setVal || setVal.size===0) return ''; return Array.from(setVal)[0]; };
+      for(const [site, meta] of Array.from(siteMap.entries()).sort((a,b)=>a[0].localeCompare(b[0]))){
+        const rowVals=[csvEscape(site), csvEscape(pickOne(meta.hacked)), csvEscape(pickOne(meta.group))];
+        colList.forEach(c=> rowVals.push(meta.feats.has(c)?'1':'0'));
+        lines.push(rowVals.join(','));
+      }
+      return lines.join('\n');
+    }
+    function csvEscape(val){
+      const s=val==null? '': String(val);
+      if(/[",\n]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
+      return s;
+    }
+    function splitValues(raw){
+      return String(raw).split(/[,;|]/).map(p=>p.trim()).filter(Boolean);
+    }
+    function collectUniqueValues(data, field){
+      const vals=new Set();
+      data.forEach(r=>{
+        const raw=r[field];
+        if(raw===null || raw===undefined) return;
+        splitValues(raw).forEach(v=>vals.add(v));
+      });
+      return Array.from(vals).sort((a,b)=>a.localeCompare(b));
+    }
+    function collectTechVerValues(data){
+      const vals=new Set();
+      data.forEach(r=>{
+        const t=String(r.technology||'').trim();
+        if(!t) return;
+        const v=String(r.versions||'').trim();
+        vals.add(`${t}|${v}`);
+      });
+      return Array.from(vals).sort((a,b)=>a.localeCompare(b));
+    }
+    function populateSelect(id, label, values){
+      const el=document.getElementById(id);
+      if(!el) return;
+      el.innerHTML='';
+      const base=document.createElement('option');
+      base.value='';
+      base.textContent=label;
+      el.appendChild(base);
+      values.forEach(v=>{
+        const opt=document.createElement('option');
+        opt.value=String(v);
+        opt.textContent=String(v);
+        el.appendChild(opt);
+      });
+    }
+    function populateDropdowns(data){
+      populateSelect('sel-tech','Technology (exact)', collectUniqueValues(data,'technology'));
+      populateSelect('sel-category','Category (exact)', collectUniqueValues(data,'categories'));
+      populateSelect('sel-tech-ver','Tech + version (exact)', collectTechVerValues(data));
+    }
+    function computeUniqueRows(data){
+      const seen=new Set();
+      const keep=[];
+      data.forEach(r=>{
+        const keyParts=[
+          r.domain_name,r.Matchid,r.post_title,r.group_name,r.published,r.start_date,
+          r.end_date,r.crawl_date,r.hacked,r.population,r.Link
+        ];
+        const key=JSON.stringify(keyParts||[]);
+        if(seen.has(key)) return;
+        seen.add(key);
+        keep.push(r);
+      });
+      return keep;
+    }
+    async function init(){
+      const res=await fetch('/api/http_archive/muni_tech_reduced');
+      const data=await res.json();
+      if(data.error){
+        document.getElementById('tech-table').innerHTML='<div style="color:#dc2626; padding:18px;">'+data.error+'</div>';
+        return;
+      }
+      payload=data;
+      fullData=(data.data||data) ?? [];
+      populateDropdowns(fullData);
+      uniqueData=computeUniqueRows(fullData);
+      buildTable(fullData);
+      attachFilters();
+      setTechColsVisible(true);
+    }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

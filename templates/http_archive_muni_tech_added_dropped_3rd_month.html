@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Muni Tech Added/Dropped (3rd Month)</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:#0f172a; color:#0b1220; }
+    .page { width:100%; max-width:100%; padding:18px 20px 60px; }
+    .panel { background:#ffffff; border-radius:16px; padding:22px 24px 30px; box-shadow:0 12px 32px -10px rgba(0,0,0,0.32); }
+    .headline { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:flex-end; margin:0 0 14px; }
+    .headline h1 { margin:0; font-size:1.85rem; color:#0f172a; }
+    .stats { display:flex; flex-wrap:wrap; gap:14px; margin:6px 0 18px; }
+    .stat { background:#f1f5f9; padding:12px 14px; border-radius:12px; min-width:150px; font-size:13px; line-height:1.35; box-shadow:inset 0 1px 0 #fff; }
+    .stat strong { display:block; font-size:22px; color:#0f172a; }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 14px; }
+    .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; min-width:170px; font-size:14px; background:#f8fafc; }
+    .filter-input:focus { outline:2px solid #6366f1; outline-offset:1px; }
+    .btn { padding:10px 14px; border-radius:10px; border:1px solid #6366f1; background:#6366f1; color:#fff; cursor:pointer; font-weight:600; }
+    .btn-alt { background:#475569; border-color:#475569; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; display:none; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#f1f5f9; }
+    .tabulator-col-title { font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.4px; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="page">
+    <div class="panel">
+      <div class="headline">
+        <h1>Muni Tech Added/Dropped (3rd Month)</h1>
+        <button id="download-csv" class="btn" type="button">Download CSV</button>
+      </div>
+
+      <div class="stats" id="stats" style="display:none;">
+        <div class="stat">Rows<br><strong id="stat-row-count">0</strong></div>
+        <div class="stat">Unique tech<br><strong id="stat-unique-tech">0</strong></div>
+        <div class="stat">Added before<br><strong id="stat-added-before">0</strong></div>
+        <div class="stat">Dropped before<br><strong id="stat-dropped-before">0</strong></div>
+        <div class="stat">Added after<br><strong id="stat-added-after">0</strong></div>
+        <div class="stat">Dropped after<br><strong id="stat-dropped-after">0</strong></div>
+      </div>
+
+      <div class="filters">
+        <input id="filter-tech" class="filter-input" placeholder="Technology contains" />
+        <button id="clear-filters" class="btn-alt btn" type="button">Reset</button>
+      </div>
+
+      <div id="top-scroll" class="top-scroll"><div id="top-scroll-spacer"></div></div>
+      <div id="table"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table;
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+    function buildTable(data){
+      table=new Tabulator('#table',{ data, layout:'fitData', pagination:true, paginationSize:200, movableColumns:true, columnDefaults:{resizable:true,minWidth:140}, columns:[
+        { title:'Technology', field:'technology', width:240, headerFilter:'input' },
+        { title:'Added before', field:'n_times_added_before_attack', width:140, hozAlign:'right' },
+        { title:'Dropped before', field:'n_times_dropped_before_attack', width:140, hozAlign:'right' },
+        { title:'Added after', field:'n_times_added_after_attack', width:140, hozAlign:'right' },
+        { title:'Dropped after', field:'n_times_dropped_after_attack', width:140, hozAlign:'right' },
+      ], });
+      table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); });
+      table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData())));
+      table.on('columnResized',syncTopScrollWidth);
+      table.on('columnMoved',syncTopScrollWidth);
+      table.on('renderComplete',syncTopScrollWidth);
+    }
+    function updateStats(data){
+      const rows=data.length;
+      const uniqueTech=new Set(data.map(r=>r.technology).filter(Boolean));
+      const sumField=(key)=> data.map(r=>Number(r[key])).filter(Number.isFinite).reduce((a,b)=>a+b,0);
+      document.getElementById('stat-row-count').textContent=rows;
+      document.getElementById('stat-unique-tech').textContent=uniqueTech.size;
+      document.getElementById('stat-added-before').textContent=sumField('n_times_added_before_attack');
+      document.getElementById('stat-dropped-before').textContent=sumField('n_times_dropped_before_attack');
+      document.getElementById('stat-added-after').textContent=sumField('n_times_added_after_attack');
+      document.getElementById('stat-dropped-after').textContent=sumField('n_times_dropped_after_attack');
+    }
+    function applyFilters(){
+      const tech=document.getElementById('filter-tech').value.trim().toLowerCase();
+      table.setFilter((row)=>{
+        if(tech){ const val=String(row.technology||'').toLowerCase(); if(!val.includes(tech)) return false; }
+        return true;
+      });
+    }
+    async function init(){
+      const res=await fetch('/api/http_archive/muni_tech_added_dropped_3rd_month');
+      const payload=await res.json();
+      if(payload.error){ document.getElementById('table').innerHTML='<div style="color:#dc2626; padding:18px;">'+payload.error+'</div>'; return; }
+      const data=payload.data || [];
+      buildTable(data);
+      document.getElementById('stats').style.display='flex';
+      document.getElementById('filter-tech').addEventListener('input',applyFilters);
+      document.getElementById('clear-filters').addEventListener('click',()=>{ document.getElementById('filter-tech').value=''; table.clearFilter(); updateStats(table.getData()); });
+      document.getElementById('download-csv').addEventListener('click',()=>{ const visible=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean); table.download('csv','muni_tech_added_dropped_3rd_month.csv',{columns:visible,rowRange:'active'}); });
+    }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

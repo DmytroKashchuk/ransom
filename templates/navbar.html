@@ -1,4 +1,9 @@
-<nav class="navbar navbar-expand-lg navbar-dark glass-nav sticky-top">
+<nav class="navbar navbar-expand-lg navbar-light glass-nav sticky-top" style="background-color: #ffffff;">
+  <style>
+    .navbar .container-fluid { display:flex; align-items:center; justify-content:space-between; }
+    .navbar #primaryNav { flex:1 1 auto; display:flex !important; justify-content:flex-end !important; }
+    .navbar #primaryNav .navbar-nav { margin-left:auto !important; }
+  </style>
   <div class="container-fluid">
     <a class="navbar-brand d-flex align-items-center gap-3" href="/">
       <span class="nav-gradient-icon"><i class="bi bi-shield-lock-fill"></i></span>
@@ -10,16 +15,16 @@
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
-    <div class="collapse navbar-collapse" id="primaryNav">
+    <div class="collapse navbar-collapse justify-content-end ms-auto" id="primaryNav">
       <ul class="navbar-nav ms-auto align-items-lg-center mb-2 mb-lg-0 gap-lg-1">
         <li class="nav-item"><a class="nav-link" href="/intro" data-path="/intro">Intro</a></li>
-        <li class="nav-item"><a class="nav-link" href="/" data-path="/">Victims Explorer</a></li>
-        <li class="nav-item"><a class="nav-link" href="/swdb" data-path="/swdb">SWDB Domains</a></li>
+        <!-- <li class="nav-item"><a class="nav-link" href="/" data-path="/">Victims Explorer</a></li>
+        <li class="nav-item"><a class="nav-link" href="/swdb" data-path="/swdb">SWDB Domains</a></li> -->
         <li class="nav-item"><a class="nav-link" href="/swdb_unique" data-path="/swdb_unique">Unique Domains</a></li>
 
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" id="datasetsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">Datasets</a>
-          <ul class="dropdown-menu dropdown-menu-dark shadow" aria-labelledby="datasetsDropdown">
+          <ul class="dropdown-menu shadow" aria-labelledby="datasetsDropdown">
             <li><a class="dropdown-item" href="/temple" data-path="/temple">Temple DB</a></li>
             <li><a class="dropdown-item" href="/ransomware_live" data-path="/ransomware_live">Ransomware.live</a></li>
             <li><a class="dropdown-item" href="/ransom_grained" data-path="/ransom_grained">Grained</a></li>
@@ -29,27 +34,35 @@
             <li><a class="dropdown-item" href="/eightk" data-path="/eightk">8-K Filings</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="/all_databases" data-path="/all_databases">All Databases</a></li>
+            <li><a class="dropdown-item" href="/detailed_databases" data-path="/detailed_databases">Detailed Databases</a></li>
           </ul>
         </li>
 
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" id="municipalitiesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">Municipalities</a>
-          <ul class="dropdown-menu dropdown-menu-dark shadow" aria-labelledby="municipalitiesDropdown">
+          <ul class="dropdown-menu shadow" aria-labelledby="municipalitiesDropdown">
             <li><a class="dropdown-item" href="/municipalities/muni_revised_oliver" data-path="/municipalities/muni_revised_oliver">Municipalities Dataset</a></li>
             <li><a class="dropdown-item" href="/http_archive/technologies" data-path="/http_archive/technologies">HTTP Archive Technologies</a></li>
             <li><a class="dropdown-item" href="/http_archive/technologies_no_root" data-path="/http_archive/technologies_no_root">HTTP Archive (Excl. Root)</a></li>
             <li><a class="dropdown-item" href="/http_archive/technologies_no_root_v2" data-path="/http_archive/technologies_no_root_v2">HTTP Archive (Excl. Root v2)</a></li>
+            <li><a class="dropdown-item" href="/http_archive/merged_technologies_by_domain" data-path="/http_archive/merged_technologies_by_domain">Merged Technologies by Domain</a></li>
+            <li><a class="dropdown-item" href="/http_archive/muni_tech_raw" data-path="/http_archive/muni_tech_raw">Muni Tech Raw</a></li>
+            <li><a class="dropdown-item" href="/http_archive/muni_tech_reduced" data-path="/http_archive/muni_tech_reduced">Muni Tech Reduced</a></li>
+            <li><a class="dropdown-item" href="/http_archive/muni_tech_installs" data-path="/http_archive/muni_tech_installs">Muni Tech Installs</a></li>
+            <li><a class="dropdown-item" href="/http_archive/muni_tech_jaccard_similarity_attack" data-path="/http_archive/muni_tech_jaccard_similarity_attack">Muni Tech Jaccard Similarity</a></li>
+            <li><a class="dropdown-item" href="/http_archive/muni_tech_added_dropped" data-path="/http_archive/muni_tech_added_dropped">Muni Tech Added/Dropped</a></li>
+            <li><a class="dropdown-item" href="/http_archive/muni_tech_added_dropped_3rd_month" data-path="/http_archive/muni_tech_added_dropped_3rd_month">Muni Tech Added/Dropped (3rd Month)</a></li>
           </ul>
         </li>
 
-        <li class="nav-item dropdown">
+        <!-- <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" id="mergedDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">Merged DBs</a>
           <ul class="dropdown-menu dropdown-menu-dark shadow" aria-labelledby="mergedDropdown">
             <li><a class="dropdown-item" href="/final_raw_merged" data-path="/final_raw_merged">Final Raw Merged</a></li>
             <li><a class="dropdown-item" href="/company_presence_matrix" data-path="/company_presence_matrix">Company Presence Matrix</a></li>
           </ul>
-        </li>
-
+        </li> -->
+<!-- 
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" id="googleDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">Google SWDB</a>
           <ul class="dropdown-menu dropdown-menu-dark shadow" aria-labelledby="googleDropdown">
@@ -57,15 +70,15 @@
             <li><a class="dropdown-item" href="/google_sites" data-path="/google_sites">Sites</a></li>
             <li><a class="dropdown-item" href="/google_technologies" data-path="/google_technologies">Technologies</a></li>
           </ul>
-        </li>
+        </li> -->
 
-        <li class="nav-item dropdown">
+        <!-- <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" id="swdbDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">SWDB Insights</a>
           <ul class="dropdown-menu dropdown-menu-dark shadow" aria-labelledby="swdbDropdown">
             <li><a class="dropdown-item" href="/swdb_preview_usa" data-path="/swdb_preview_usa">USA Snapshot Explorer</a></li>
             <li><a class="dropdown-item" href="/swdb/regions_by_year" data-path="/swdb/regions_by_year">Regions by Year</a></li>
           </ul>
-        </li>
+        </li> -->
       </ul>
     </div>
   </div>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Muni Tech Installs</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:#0f172a; color:#0b1220; }
+    .page { width:100%; max-width:100%; padding:18px 20px 60px; }
+    .panel { background:#ffffff; border-radius:16px; padding:22px 24px 30px; box-shadow:0 12px 32px -10px rgba(0,0,0,0.32); }
+    .headline { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:flex-end; margin:0 0 14px; }
+    .headline h1 { margin:0; font-size:1.85rem; color:#0f172a; }
+    .stats { display:flex; flex-wrap:wrap; gap:14px; margin:6px 0 18px; }
+    .stat { background:#f1f5f9; padding:12px 14px; border-radius:12px; min-width:150px; font-size:13px; line-height:1.35; box-shadow:inset 0 1px 0 #fff; }
+    .stat strong { display:block; font-size:22px; color:#0f172a; }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 14px; }
+    .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; min-width:170px; font-size:14px; background:#f8fafc; }
+    .filter-input:focus { outline:2px solid #6366f1; outline-offset:1px; }
+    .btn { padding:10px 14px; border-radius:10px; border:1px solid #6366f1; background:#6366f1; color:#fff; cursor:pointer; font-weight:600; }
+    .btn-alt { background:#475569; border-color:#475569; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; display:none; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#f1f5f9; }
+    .tabulator-col-title { font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.4px; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="page">
+    <div class="panel">
+      <div class="headline">
+        <h1>Muni Tech Installs</h1>
+        <button id="download-csv" class="btn" type="button">Download CSV</button>
+      </div>
+
+      <div class="stats" id="stats">
+        <div class="stat">Technologies<br><strong id="stat-techs">0</strong></div>
+        <div class="stat">Total installs<br><strong id="stat-installs">0</strong></div>
+        <div class="stat">Unique domains<br><strong id="stat-domains">0</strong></div>
+        <div class="stat">Hacked domains<br><strong id="stat-hacked">0</strong></div>
+        <div class="stat">Sites (links)<br><strong id="stat-links">0</strong></div>
+      </div>
+
+      <div class="filters">
+        <input id="filter-tech" class="filter-input" placeholder="Technology contains" />
+        <input id="filter-category" class="filter-input" placeholder="Category contains" />
+        <input id="filter-version" class="filter-input" placeholder="Version contains" />
+        <input id="filter-min-installs" class="filter-input" type="number" min="0" placeholder="Min installs" />
+        <input id="filter-min-domains" class="filter-input" type="number" min="0" placeholder="Min domains" />
+        <button id="clear-filters" class="btn-alt btn" type="button">Reset</button>
+      </div>
+
+      <div id="top-scroll" class="top-scroll"><div id="top-scroll-spacer"></div></div>
+      <div id="table"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table;
+
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+
+    function formatDate(val){ if(!val) return ''; const d=new Date(val); return Number.isNaN(d.getTime())? String(val): d.toISOString().slice(0,10); }
+
+    function updateStats(data, apiStats){
+      const rows=data.length;
+      const installs=data.reduce((sum,r)=> sum + (Number(r.install_rows)||0), 0);
+      document.getElementById('stat-techs').textContent=rows;
+      document.getElementById('stat-installs').textContent=installs;
+      document.getElementById('stat-domains').textContent=apiStats?.unique_domains ?? '-';
+      document.getElementById('stat-hacked').textContent=apiStats?.hacked_domains ?? '-';
+      document.getElementById('stat-links').textContent=apiStats?.unique_links ?? '-';
+    }
+
+    function applyFilters(){
+      const tech=document.getElementById('filter-tech').value.trim().toLowerCase();
+      const cat=document.getElementById('filter-category').value.trim().toLowerCase();
+      const ver=document.getElementById('filter-version').value.trim().toLowerCase();
+      const minInstRaw=document.getElementById('filter-min-installs').value.trim();
+      const minDomRaw=document.getElementById('filter-min-domains').value.trim();
+      const minInst=minInstRaw===''? null: Number(minInstRaw);
+      const minDom=minDomRaw===''? null: Number(minDomRaw);
+      table.setFilter(row=>{
+        if(tech && !(String(row.technology||'').toLowerCase().includes(tech))) return false;
+        if(cat && !(String(row.categories||'').toLowerCase().includes(cat))) return false;
+        if(ver && !(String(row.versions||'').toLowerCase().includes(ver))) return false;
+        if(minInst!==null && Number(row.install_rows||0) < minInst) return false;
+        if(minDom!==null && Number(row.unique_domains||0) < minDom) return false;
+        return true;
+      });
+    }
+
+    function attachFilters(){
+      ['filter-tech','filter-category','filter-version','filter-min-installs','filter-min-domains'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el) return;
+        const evt=id.includes('min-')? 'input':'input';
+        el.addEventListener(evt,applyFilters);
+      });
+      const resetBtn=document.getElementById('clear-filters');
+      if(resetBtn){
+        resetBtn.addEventListener('click',()=>{
+          ['filter-tech','filter-category','filter-version','filter-min-installs','filter-min-domains'].forEach(id=>{
+            const el=document.getElementById(id); if(el) el.value='';
+          });
+          table.clearFilter();
+          updateStats(table.getData(), table.meta?.apiStats);
+        });
+      }
+    }
+
+    function buildTable(data, apiStats){
+      table=new Tabulator('#table',{
+        data,
+        layout:'fitData',
+        pagination:true,
+        paginationSize:200,
+        movableColumns:true,
+        initialSort:[{column:'install_rows', dir:'desc'}],
+        columnDefaults:{resizable:true,minWidth:140},
+        columns:[
+          {title:'Technology', field:'technology', width:220},
+          {title:'Categories', field:'categories', width:220},
+          {title:'Versions', field:'versions', width:160},
+          {title:'Install rows', field:'install_rows', width:140, hozAlign:'right'},
+          {title:'Unique domains', field:'unique_domains', width:140, hozAlign:'right'},
+          {title:'Hacked domains', field:'hacked_domains', width:140, hozAlign:'right'},
+          {title:'Non-hacked', field:'non_hacked_domains', width:140, hozAlign:'right'},
+          {title:'Sites', field:'unique_links', width:120, hozAlign:'right'},
+          {title:'Match IDs', field:'unique_matchids', width:130, hozAlign:'right'},
+          {title:'First seen', field:'first_seen', width:130, formatter:(cell)=>formatDate(cell.getValue())},
+          {title:'Last seen', field:'last_seen', width:130, formatter:(cell)=>formatDate(cell.getValue())},
+        ],
+      });
+      table.meta={apiStats};
+      table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData(), apiStats); });
+      table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData()), apiStats));
+      table.on('columnResized',syncTopScrollWidth);
+      table.on('columnMoved',syncTopScrollWidth);
+      table.on('renderComplete',syncTopScrollWidth);
+    }
+
+    async function init(){
+      const res=await fetch('/api/http_archive/muni_tech_installs');
+      const payload=await res.json();
+      if(payload.error){ document.getElementById('table').innerHTML='<div style="color:#dc2626; padding:18px;">'+payload.error+'</div>'; return; }
+      const data=payload.data || [];
+      buildTable(data, payload.stats||{});
+      attachFilters();
+      document.getElementById('download-csv').addEventListener('click',()=>{
+        const visible=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean);
+        table.download('csv','muni_tech_installs.csv',{columns:visible,rowRange:'active'});
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Detailed Databases Overview</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:#0f172a; color:#111827; }
+    .container { max-width:100%; padding:18px 20px 60px; }
+    .panel { background:#fff; border-radius:18px; padding:22px 26px 34px; box-shadow:0 14px 38px -10px rgba(0,0,0,0.35); margin-bottom:24px; }
+    h1 { margin:0 0 6px; font-size:1.9rem; letter-spacing:.5px; }
+    p.sub { margin:0 0 18px; color:#475569; font-size:14px; }
+
+    /* Global search bar */
+    .global-search-wrap { display:flex; align-items:center; gap:10px; margin:0 0 20px; flex-wrap:wrap; }
+    .global-search-wrap input { flex:1 1 400px; padding:14px 16px; border:1px solid #cbd5e1; border-radius:12px; font-size:16px; background:#f8fafc; transition:border-color .2s; }
+    .global-search-wrap input:focus { outline:none; border-color:#6366f1; box-shadow:0 0 0 3px rgba(99,102,241,.15); }
+    .global-search-wrap button { padding:14px 20px; border-radius:12px; border:1px solid #6366f1; background:#6366f1; color:#fff; cursor:pointer; font-size:14px; font-weight:600; transition:background .2s; }
+    .global-search-wrap button:hover { background:#4f46e5; }
+    .global-search-wrap button.secondary { background:#64748b; border-color:#64748b; }
+    .global-search-wrap button.secondary:hover { background:#475569; }
+
+    /* Database section */
+    .db-section { margin-bottom:32px; }
+    .db-section:last-child { margin-bottom:0; }
+    .db-header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+    .db-title { font-size:1.25rem; font-weight:700; display:flex; align-items:center; gap:10px; }
+    .db-title .db-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; color:#fff; flex-shrink:0; }
+    .db-badge { background:#f1f5f9; color:#334155; padding:5px 12px; border-radius:8px; font-size:12px; font-weight:600; }
+    .db-badge.match-count { background:#fef3c7; color:#92400e; }
+    .db-desc { color:#64748b; font-size:13px; margin:0 0 10px; }
+
+    /* Color-coded icons per database */
+    .icon-temple { background:#6366f1; }
+    .icon-rl { background:#ec4899; }
+    .icon-grained { background:#f59e0b; }
+    .icon-maryland { background:#10b981; }
+    .icon-tenk { background:#3b82f6; }
+    .icon-eightk { background:#8b5cf6; }
+
+    /* Table wrapper */
+    .table-wrap { border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }
+    .table-wrap .tabulator { border:none !important; font-size:13px; }
+    .table-wrap .tabulator .tabulator-header { background:#f8fafc; }
+    .tabulator-col-title { font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.5px; }
+
+    /* Highlight */
+    .hl { background:#fde047; padding:0 2px; border-radius:3px; }
+
+    /* Loading & errors */
+    .loading { text-align:center; padding:40px; color:#64748b; font-size:15px; }
+    .loading .spinner { display:inline-block; width:28px; height:28px; border:3px solid #e2e8f0; border-top-color:#6366f1; border-radius:50%; animation:spin .7s linear infinite; margin-bottom:12px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .error-msg { color:#dc2626; padding:18px; }
+    .no-match { color:#dc2626; padding:14px; font-size:13px; display:none; }
+
+    /* Summary bar */
+    .summary-bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px; }
+    .summary-chip { display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:10px; background:#f1f5f9; font-size:13px; }
+    .summary-chip .chip-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    .summary-chip .chip-count { font-weight:700; color:#1e293b; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="panel">
+      <h1>🔍 Detailed Databases Overview</h1>
+      <p class="sub">
+        Six ransomware databases displayed side-by-side with full record details.
+        Use the search bar to filter by <strong>entity / company name</strong> across all tables simultaneously.
+        When a filter is active, all matching records are shown. Default view shows 5 records per table.
+      </p>
+
+      <div class="global-search-wrap">
+        <input id="global-search" placeholder="Filter by entity / company name across all 6 databases (e.g. university, hospital, acme)..." autocomplete="off" />
+        <button id="btn-search" type="button">Search</button>
+        <button id="btn-clear" type="button" class="secondary">Clear</button>
+      </div>
+
+      <div id="summary-bar" class="summary-bar"></div>
+      <div id="loading" class="loading"><div class="spinner"></div><br/>Loading all databases…</div>
+      <div id="error" class="error-msg" style="display:none;"></div>
+
+      <div id="tables-container" style="display:none;">
+        <!-- 1. Temple DB -->
+        <div class="db-section" id="sec-temple">
+          <div class="db-header">
+            <div class="db-title"><div class="db-icon icon-temple">🏛</div>Temple DB</div>
+            <div><span class="db-badge" id="badge-temple-total"></span> <span class="db-badge match-count" id="badge-temple-match" style="display:none;"></span></div>
+          </div>
+          <p class="db-desc">Ransomware incidents from the Temple University CIMBA dataset — includes ransom amounts, payment status, strain/group info, and duration.</p>
+          <div class="table-wrap"><div id="table-temple"></div></div>
+          <div class="no-match" id="nomatch-temple">No matching records in Temple DB.</div>
+        </div>
+
+        <!-- 2. Ransomware Live -->
+        <div class="db-section" id="sec-rl">
+          <div class="db-header">
+            <div class="db-title"><div class="db-icon icon-rl">📡</div>Ransomware.live</div>
+            <div><span class="db-badge" id="badge-rl-total"></span> <span class="db-badge match-count" id="badge-rl-match" style="display:none;"></span></div>
+          </div>
+          <p class="db-desc">Aggregated ransomware group posts scraped from dark web leak sites — victim names, group attribution, and country/sector info.</p>
+          <div class="table-wrap"><div id="table-rl"></div></div>
+          <div class="no-match" id="nomatch-rl">No matching records in Ransomware.live.</div>
+        </div>
+
+        <!-- 3. Grained DB -->
+        <div class="db-section" id="sec-grained">
+          <div class="db-header">
+            <div class="db-title"><div class="db-icon icon-grained">🔬</div>Grained DB</div>
+            <div><span class="db-badge" id="badge-grained-total"></span> <span class="db-badge match-count" id="badge-grained-match" style="display:none;"></span></div>
+          </div>
+          <p class="db-desc">Fine-grained ransomware incident records — attack vectors, data exposure details, ransom amounts, payment outcomes, and operational impact.</p>
+          <div class="table-wrap"><div id="table-grained"></div></div>
+          <div class="no-match" id="nomatch-grained">No matching records in Grained DB.</div>
+        </div>
+
+        <!-- 4. Maryland -->
+        <div class="db-section" id="sec-maryland">
+          <div class="db-header">
+            <div class="db-title"><div class="db-icon icon-maryland">🦀</div>Maryland (CISSM)</div>
+            <div><span class="db-badge" id="badge-maryland-total"></span> <span class="db-badge match-count" id="badge-maryland-match" style="display:none;"></span></div>
+          </div>
+          <p class="db-desc">University of Maryland CISSM Cyber Events Database — broad cyber incidents including actor info, event type, motive, and geographic data.</p>
+          <div class="table-wrap"><div id="table-maryland"></div></div>
+          <div class="no-match" id="nomatch-maryland">No matching records in Maryland DB.</div>
+        </div>
+
+        <!-- 5. 10-K -->
+        <div class="db-section" id="sec-tenk">
+          <div class="db-header">
+            <div class="db-title"><div class="db-icon icon-tenk">📊</div>10-K Filings</div>
+            <div><span class="db-badge" id="badge-tenk-total"></span> <span class="db-badge match-count" id="badge-tenk-match" style="display:none;"></span></div>
+          </div>
+          <p class="db-desc">SEC 10-K annual filing records — company name, sector, SIC code, total assets, and filing URLs.</p>
+          <div class="table-wrap"><div id="table-tenk"></div></div>
+          <div class="no-match" id="nomatch-tenk">No matching records in 10-K Filings.</div>
+        </div>
+
+        <!-- 6. 8-K -->
+        <div class="db-section" id="sec-eightk">
+          <div class="db-header">
+            <div class="db-title"><div class="db-icon icon-eightk">📝</div>8-K Filings</div>
+            <div><span class="db-badge" id="badge-eightk-total"></span> <span class="db-badge match-count" id="badge-eightk-match" style="display:none;"></span></div>
+          </div>
+          <p class="db-desc">SEC 8-K current event filings — cybersecurity disclosures (Item 1.05) and other material events from public companies.</p>
+          <div class="table-wrap"><div id="table-eightk"></div></div>
+          <div class="no-match" id="nomatch-eightk">No matching records in 8-K Filings.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+  /* ============================================================
+     Detailed Databases — 6 Tabulator tables with global filter
+     ============================================================ */
+  const DB_CONFIG = [
+    {
+      key: 'temple', el: 'table-temple', badge: 'badge-temple-total', matchBadge: 'badge-temple-match', noMatch: 'nomatch-temple',
+      label: 'Temple DB',
+      dotColor: '#6366f1',
+      nameField: 'org_name',
+      cols: [
+        { title:'ID',             field:'id',                 width:60 },
+        { title:'Organization',   field:'org_name',           width:240 },
+        { title:'Date',           field:'date_began',         width:110 },
+        { title:'Year',           field:'year',               width:70 },
+        { title:'Location',       field:'location',           width:150 },
+        { title:'Sector',         field:'primary_ci_sector',  width:160 },
+        { title:'Sector 2',       field:'secondary_ci_sector',width:140 },
+        { title:'Strain/Group',   field:'strain_group',       width:150 },
+        { title:'MITRE ATT&CK',   field:'mitre_attack_id',    width:130 },
+        { title:'Duration',       field:'duration',           width:140 },
+        { title:'Duration Rank',  field:'duration_rank',      width:120 },
+        { title:'Ransom Amount',  field:'ransom_amount',      width:130 },
+        { title:'Currency',       field:'local_currency',     width:110 },
+        { title:'Ransom Scale',   field:'ransom_scale',       width:120 },
+        { title:'Paid?',          field:'paid_status',        width:80 },
+        { title:'Pay Method',     field:'pay_method',         width:110 },
+        { title:'Amount Paid',    field:'amount_paid',        width:120 },
+        { title:'Source',         field:'source',             width:280, formatter:'link', formatterParams:{ urlField:'source', target:'_blank' } },
+        { title:'Comments',       field:'comments',           width:250 },
+      ]
+    },
+    {
+      key: 'ransomware_live', el: 'table-rl', badge: 'badge-rl-total', matchBadge: 'badge-rl-match', noMatch: 'nomatch-rl',
+      label: 'Ransomware.live',
+      dotColor: '#ec4899',
+      nameField: 'post_title',
+      cols: [
+        { title:'Victim',      field:'post_title',  width:260 },
+        { title:'Group',       field:'group_name',  width:160 },
+        { title:'Discovered',  field:'discovered',  width:200 },
+        { title:'Published',   field:'published',   width:200 },
+        { title:'Country',     field:'country',     width:80 },
+        { title:'Activity',    field:'activity',    width:150 },
+        { title:'Website',     field:'website',     width:200 },
+        { title:'Description', field:'description', width:350 },
+        { title:'Post URL',    field:'post_url',    width:280, formatter:'link', formatterParams:{ urlField:'post_url', target:'_blank' } },
+      ]
+    },
+    {
+      key: 'grained', el: 'table-grained', badge: 'badge-grained-total', matchBadge: 'badge-grained-match', noMatch: 'nomatch-grained',
+      label: 'Grained DB',
+      dotColor: '#f59e0b',
+      nameField: 'victim',
+      cols: [
+        { title:'Victim',            field:'victim',                             width:240 },
+        { title:'Sector',            field:'sector',                             width:140 },
+        { title:'Attacker',          field:'attacker',                           width:150 },
+        { title:'Incident Date',     field:'incident_date',                      width:120 },
+        { title:'Sources',           field:'sources',                            width:280 },
+        { title:'Payment Outcome',   field:'payment_outcome',                    width:140 },
+        { title:'Data Destruction',  field:'data_destruction',                   width:130 },
+        { title:'Data Exfiltration', field:'data_exfiltration',                  width:130 },
+        { title:'Data Exposure',     field:'data_exposure',                      width:120 },
+        { title:'Data Sale',         field:'data_sale',                          width:100 },
+        { title:'Ransomware Variant',field:'attack_vector_ransomware_variant',   width:180 },
+        { title:'Ransom (USD)',      field:'attacker_action_ransom_amount_usd',   width:130 },
+        { title:'Loss (USD)',        field:'impact_loss_amount_usd',              width:130 },
+        { title:'Operational Impact',field:'impact_category_Operational_Impact',  width:150 },
+        { title:'Financial Loss',    field:'impact_category_Financial_Loss',      width:130 },
+      ]
+    },
+    {
+      key: 'maryland', el: 'table-maryland', badge: 'badge-maryland-total', matchBadge: 'badge-maryland-match', noMatch: 'nomatch-maryland',
+      label: 'Maryland (CISSM)',
+      dotColor: '#10b981',
+      nameField: 'organization',
+      cols: [
+        { title:'Organization', field:'organization',  width:240 },
+        { title:'Event Date',   field:'event_date',    width:110 },
+        { title:'Reported',     field:'reported_date', width:110 },
+        { title:'Year',         field:'year',          width:70 },
+        { title:'Actor',        field:'actor',         width:160 },
+        { title:'Actor Type',   field:'actor_type',    width:120 },
+        { title:'Industry',     field:'industry',      width:200 },
+        { title:'Motive',       field:'motive',        width:130 },
+        { title:'Event Type',   field:'event_type',    width:140 },
+        { title:'Event Subtype',field:'event_subtype', width:180 },
+        { title:'Magnitude',    field:'magnitude',     width:110 },
+        { title:'Duration',     field:'duration',      width:110 },
+        { title:'Country',      field:'country',       width:180 },
+        { title:'State',        field:'state',         width:130 },
+        { title:'County',       field:'county',        width:130 },
+        { title:'Description',  field:'description',   width:350 },
+        { title:'Source',       field:'source_url',    width:280, formatter:'link', formatterParams:{ urlField:'source_url', target:'_blank' } },
+      ]
+    },
+    {
+      key: 'tenk', el: 'table-tenk', badge: 'badge-tenk-total', matchBadge: 'badge-tenk-match', noMatch: 'nomatch-tenk',
+      label: '10-K Filings',
+      dotColor: '#3b82f6',
+      nameField: 'name',
+      cols: [
+        { title:'CIK',           field:'cik',              width:90 },
+        { title:'Company',       field:'name',             width:260 },
+        { title:'Total Assets',  field:'total_assets_24',  width:140 },
+        { title:'Size',          field:'size',             width:110 },
+        { title:'Sector',        field:'sector',           width:150 },
+        { title:'SIC',           field:'sic',              width:80 },
+        { title:'SIC Description',field:'sic_description', width:260 },
+        { title:'Filing URL',    field:'url',              width:300, formatter:'link', formatterParams:{ urlField:'url', target:'_blank' } },
+      ]
+    },
+    {
+      key: 'eightk', el: 'table-eightk', badge: 'badge-eightk-total', matchBadge: 'badge-eightk-match', noMatch: 'nomatch-eightk',
+      label: '8-K Filings',
+      dotColor: '#8b5cf6',
+      nameField: 'company',
+      cols: [
+        { title:'Company',       field:'company',       width:260 },
+        { title:'Ticker',        field:'stockticker',   width:120 },
+        { title:'Form',          field:'form',          width:70 },
+        { title:'File Date',     field:'file_date',     width:110 },
+        { title:'CIK',           field:'cik',           width:100 },
+        { title:'ADSH',          field:'adsh',          width:200 },
+        { title:'Display Name',  field:'display_name',  width:320 },
+        { title:'Item 1.05',     field:'item105',       width:90 },
+        { title:'Item 8.01',     field:'item801',       width:90 },
+        { title:'Filing Link',   field:'link',          width:300, formatter:'link', formatterParams:{ urlField:'link', target:'_blank' } },
+      ]
+    },
+  ];
+
+  /* State */
+  const tables = {};
+  let allData = {};
+  let lastQuery = '';
+
+  /* ---- Highlight formatter ---- */
+  function hlFormatter(cell) {
+    const val = cell.getValue();
+    if (val == null) return '';
+    const s = String(val);
+    if (!lastQuery) return s;
+    const idx = s.toLowerCase().indexOf(lastQuery.toLowerCase());
+    if (idx === -1) return s;
+    const before = s.slice(0, idx);
+    const match  = s.slice(idx, idx + lastQuery.length);
+    const after  = s.slice(idx + lastQuery.length);
+    return `${before}<span class="hl">${match}</span>${after}`;
+  }
+
+  /* ---- Build one Tabulator ---- */
+  function buildTable(cfg, data) {
+    // Apply highlight formatter to columns that don't have a custom formatter
+    const cols = cfg.cols.map(c => {
+      if (!c.formatter || c.formatter === 'plaintext') {
+        return { ...c, formatter: hlFormatter };
+      }
+      return c;
+    });
+
+    const t = new Tabulator('#' + cfg.el, {
+      data: data,
+      layout: 'fitData',
+      pagination: true,
+      paginationSize: 5,
+      paginationSizeSelector: [5, 10, 25, 50],
+      movableColumns: true,
+      columnDefaults: { resizable: true, minWidth: 60 },
+      columns: cols,
+      placeholder: 'No data available',
+    });
+
+    t.on('dataFiltered', () => {
+      const count = t.getDataCount('active');
+      const nm = document.getElementById(cfg.noMatch);
+      if (nm) nm.style.display = count === 0 && lastQuery ? 'block' : 'none';
+    });
+
+    return t;
+  }
+
+  /* ---- Global search / filter ---- */
+  function applyFilter() {
+    const q = document.getElementById('global-search').value.trim();
+    lastQuery = q;
+    const lc = q.toLowerCase();
+
+    DB_CONFIG.forEach(cfg => {
+      const t = tables[cfg.key];
+      if (!t) return;
+
+      if (!q) {
+        t.clearFilter();
+        // Restore default pagination (5 per page)
+        t.setPageSize(5);
+        t.redraw(true);
+        // Reset badges
+        document.getElementById(cfg.matchBadge).style.display = 'none';
+        document.getElementById(cfg.noMatch).style.display = 'none';
+        return;
+      }
+
+      // Filter: match only on the name/entity column for this database
+      const field = cfg.nameField;
+      t.setFilter((row) => {
+        const v = row[field];
+        return v != null && String(v).toLowerCase().includes(lc);
+      });
+
+      const matchCount = t.getDataCount('active');
+      // Show ALL matching results (remove pagination limit)
+      t.setPageSize(matchCount || 1);
+
+      const badge = document.getElementById(cfg.matchBadge);
+      badge.textContent = matchCount + ' match' + (matchCount !== 1 ? 'es' : '');
+      badge.style.display = 'inline-block';
+      t.redraw(true);
+    });
+
+    updateSummary();
+  }
+
+  /* ---- Summary bar ---- */
+  function updateSummary() {
+    const bar = document.getElementById('summary-bar');
+    bar.innerHTML = '';
+
+    DB_CONFIG.forEach(cfg => {
+      const t = tables[cfg.key];
+      if (!t) return;
+      const total = t.getDataCount();
+      const active = lastQuery ? t.getDataCount('active') : total;
+      const chip = document.createElement('div');
+      chip.className = 'summary-chip';
+      chip.innerHTML = `<span class="chip-dot" style="background:${cfg.dotColor}"></span>` +
+        `<span>${cfg.label}</span>` +
+        `<span class="chip-count">${active.toLocaleString()}` +
+        (lastQuery ? ` / ${total.toLocaleString()}` : '') +
+        `</span>`;
+      bar.appendChild(chip);
+    });
+  }
+
+  /* ---- Event handlers ---- */
+  function attachHandlers() {
+    const input = document.getElementById('global-search');
+
+    // Debounced input
+    let timer;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(applyFilter, 300);
+    });
+
+    document.getElementById('btn-search').addEventListener('click', applyFilter);
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      input.value = '';
+      lastQuery = '';
+      applyFilter();
+    });
+
+    // Enter key
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { clearTimeout(timer); applyFilter(); }
+    });
+  }
+
+  /* ---- Init ---- */
+  async function init() {
+    try {
+      const res = await fetch('/api/detailed_databases');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+
+      if (data.error) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').textContent = data.error;
+        document.getElementById('error').style.display = 'block';
+        return;
+      }
+
+      allData = data;
+
+      // Hide loading, show tables
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('tables-container').style.display = 'block';
+
+      // Build each table
+      DB_CONFIG.forEach(cfg => {
+        const records = data[cfg.key] || [];
+        const total = (data._meta && data._meta[cfg.key + '_total']) || records.length;
+        document.getElementById(cfg.badge).textContent = total.toLocaleString() + ' records';
+        tables[cfg.key] = buildTable(cfg, records);
+      });
+
+      updateSummary();
+      attachHandlers();
+
+    } catch (err) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').textContent = 'Failed to load data: ' + err;
+      document.getElementById('error').style.display = 'block';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

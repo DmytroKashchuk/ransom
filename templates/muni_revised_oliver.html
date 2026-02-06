@@ -6,10 +6,15 @@
   <title>Municipalities (Revised Oliver)</title>
   <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
   <link href="/static/css/main.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { margin:0; background:#1e293b; }
+    body { margin:0; background:var(--color-surface-alt); color:var(--color-ink); }
     .container { max-width:100%; padding:18px 20px 60px; }
-    .panel { background:#fff; border-radius:16px; padding:20px 24px 30px; box-shadow:0 12px 32px -8px rgba(0,0,0,0.25); }
+    .panel { background:#fff; border-radius:16px; padding:20px 24px 30px; box-shadow:0 12px 32px -8px rgba(15,23,42,0.12); border:1px solid rgba(226,232,240,0.9); }
+    .chart-card { margin:8px 0 18px; padding:14px 16px; border:1px solid #e2e8f0; border-radius:14px; background:#f8fafc; }
+    .chart-header { font-weight:600; font-size:15px; margin-bottom:8px; color:#0f172a; }
+    .chart-body { position:relative; height:220px; }
+    #year-chart-placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:14px; }
     .filters { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
     .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; min-width:160px; font-size:14px; }
     .btn { padding:10px 14px; border:1px solid #6366f1; background:#6366f1; color:#fff; border-radius:8px; cursor:pointer; }
@@ -36,21 +41,31 @@
   {% include 'navbar.html' %}
   <div class="container">
     <div class="panel">
-      <h1 style="margin:0 0 12px; font-size:1.8rem;">Municipalities (Revised Oliver)</h1>
+      <div class="page-hero" style="margin-bottom:14px;">
+        <div class="eyebrow">Municipalities</div>
+        <h1 style="margin:0; font-size:1.9rem;">Revised Oliver Dataset</h1>
+        <p style="margin:6px 0 0; color:var(--color-muted);">Filter incidents by title, group, country, website, and link.</p>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">Ransom attacks over the years</div>
+        <div class="chart-body">
+          <canvas id="year-chart" aria-label="Ransom attacks per year" role="img"></canvas>
+          <div id="year-chart-placeholder">No year data available</div>
+        </div>
+      </div>
       <div class="stats" id="stats-bar">
         <div class="stat">Rows<br><strong id="stat-rows">0</strong></div>
-        <div class="stat">Distinct Websites<br><strong id="stat-websites">0</strong></div>
+        <div class="stat">Distinct Domains<br><strong id="stat-domains">0</strong></div>
         <div class="stat">Gov Service True<br><strong id="stat-gov-true">0</strong></div>
         <div class="stat">Gov Service False<br><strong id="stat-gov-false">0</strong></div>
+        <div class="stat">Hacked = 1<br><strong id="stat-hacked-yes">0</strong></div>
+        <div class="stat">Hacked = 0<br><strong id="stat-hacked-no">0</strong></div>
       </div>
       <div class="filters">
         <input id="flt-title" class="filter-input" placeholder="Post Title" />
         <input id="flt-actor" class="filter-input" placeholder="Group" />
         <input id="flt-country" class="filter-input" placeholder="Country" />
-        <input id="flt-website" class="filter-input" placeholder="Website" />
-        <label style="display:flex; align-items:center; gap:6px; font-size:12px; background:#f1f5f9; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;">
-          <input type="checkbox" id="chk-has-website" /> Has Website
-        </label>
+        <input id="flt-link" class="filter-input" placeholder="Domain Name" />
         <label style="display:flex; align-items:center; gap:6px; font-size:12px; background:#f1f5f9; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px;">
           <input type="checkbox" id="chk-gov-only" /> Gov Service Only
         </label>
@@ -79,38 +94,79 @@
   </div>
   <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
   <script>
-    let table; let fullPayload=null; let govColumn=null;
+    let table; let fullPayload=null; let govColumn=null; let yearChart=null;
+    function getYear(val){
+      if(val===null||val===undefined) return null;
+      if(typeof val==='number' && val>1900 && val<2100) return Math.floor(val);
+      if(typeof val==='string'){
+        const m=val.match(/(19|20)\d{2}/);
+        if(m){ const y=parseInt(m[0],10); if(y>1900 && y<2100) return y; }
+      }
+      return null;
+    }
+    function updateYearChart(counts){
+      const canvas=document.getElementById('year-chart');
+      const placeholder=document.getElementById('year-chart-placeholder');
+      if(!canvas||!placeholder) return;
+      const entries=Object.entries(counts).sort((a,b)=>parseInt(a[0],10)-parseInt(b[0],10));
+      const labels=entries.map(e=>e[0]);
+      const data=entries.map(e=>e[1]);
+      placeholder.style.display = labels.length ? 'none':'flex';
+      if(!yearChart){
+        yearChart=new Chart(canvas,{type:'bar',data:{labels,datasets:[{label:'Ransom attacks',data,backgroundColor:'rgba(99,102,241,0.45)',borderColor:'#6366f1',borderWidth:1.5,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+      } else {
+        yearChart.data.labels=labels;
+        yearChart.data.datasets[0].data=data;
+        yearChart.update();
+      }
+    }
     function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#muni-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
     function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#muni-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#muni-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
-    function updateStats(filteredData){ if(!fullPayload) return; const stats=fullPayload.stats||{}; const total=filteredData.length; document.getElementById('stat-rows').textContent=total; if(!filteredData.length){ document.getElementById('stat-websites').textContent=0; document.getElementById('stat-gov-true').textContent=0; document.getElementById('stat-gov-false').textContent=0; return; }
-      const websites=new Set(); let t=0,f=0; filteredData.forEach(r=>{ if(r.website){ websites.add(r.website.trim()); } if(govColumn && r[govColumn]==='True') t++; else if(govColumn && r[govColumn]==='False') f++; });
-      document.getElementById('stat-websites').textContent=websites.size; document.getElementById('stat-gov-true').textContent=t; document.getElementById('stat-gov-false').textContent=f; }
-  function buildColumns(cols){ return cols.map(c=>{ if(c.toLowerCase()==='website') return {title:c, field:c, width:220, formatter:(cell)=>{ const v=cell.getValue(); if(!v) return '-'; const url=v.startsWith('http')?v:`https://${v}`; return `<a href="${url}" target="_blank" style="color:#6366f1;">${v}</a>`; }}; if(c.toLowerCase()==='link') return {title:c, field:c, width:320, formatter:(cell)=>{ const v=cell.getValue(); if(!v) return '-'; const safe=v.replace(/"/g,'&quot;'); return `<a href="${v}" target="_blank" style="color:#6366f1; text-decoration:underline;">${safe}</a>`; }}; if(c.toLowerCase()==='post_title') return {title:'Post Title', field:c, width:260}; return {title:c, field:c, width:160}; }); }
+    function updateStats(filteredData){ if(!fullPayload) return; const total=filteredData.length; document.getElementById('stat-rows').textContent=total; if(!filteredData.length){ document.getElementById('stat-domains').textContent=0; document.getElementById('stat-gov-true').textContent=0; document.getElementById('stat-gov-false').textContent=0; document.getElementById('stat-hacked-yes').textContent=0; document.getElementById('stat-hacked-no').textContent=0; updateYearChart({}); return; }
+      const domains=new Set(); let t=0,f=0; let hackedYes=0, hackedNo=0; const yearCounts={};
+      filteredData.forEach(r=>{
+        const d=r.domain_name || r.website || r.Link || r.link;
+        if(d){ domains.add(String(d).trim().toLowerCase()); }
+        if(govColumn && r[govColumn]==='True') t++; else if(govColumn && r[govColumn]==='False') f++;
+        const hvRaw = r.hacked;
+        let isHackedYes = false; let isHackedNo = false;
+        if(hvRaw === 1 || hvRaw === 1.0) { isHackedYes = true; }
+        else if(hvRaw === 0 || hvRaw === 0.0) { isHackedNo = true; }
+        else if(typeof hvRaw === 'string'){
+          const hackedVal = hvRaw.trim().toLowerCase();
+          if(hackedVal === '1' || hackedVal === 'true') isHackedYes = true;
+          else if(hackedVal === '0' || hackedVal === 'false') isHackedNo = true;
+        }
+        if(isHackedYes) hackedYes++; else if(isHackedNo) hackedNo++;
+        const year = getYear(r.published || r.start_date || r.discovered || r.date || r.event_date);
+        if(year){ yearCounts[year]=(yearCounts[year]||0)+1; }
+      });
+      document.getElementById('stat-domains').textContent=domains.size; document.getElementById('stat-gov-true').textContent=t; document.getElementById('stat-gov-false').textContent=f; document.getElementById('stat-hacked-yes').textContent=hackedYes; document.getElementById('stat-hacked-no').textContent=hackedNo; updateYearChart(yearCounts); }
+  function buildColumns(cols){ return cols.map(c=>{ if(c.toLowerCase()==='website') return {title:'Website', field:c, width:220, formatter:(cell)=>{ const v=cell.getValue(); if(!v) return '-'; const url=v.startsWith('http')?v:`https://${v}`; return `<a href="${url}" target="_blank" style="color:#6366f1;">${v}</a>`; }}; if(c.toLowerCase()==='link') return {title:'Domain Name', field:c, width:280, formatter:(cell)=>{ const v=cell.getValue(); if(!v) return '-'; const safe=v.replace(/"/g,'&quot;'); return `<a href="${v}" target="_blank" style="color:#6366f1; text-decoration:underline;">${safe}</a>`; }}; if(c.toLowerCase()==='post_title') return {title:'Post Title', field:c, width:260}; return {title:c, field:c, width:160}; }); }
     function buildTable(payload){ const data=payload.data||[]; govColumn=payload.stats && payload.stats.government_service_column; const cols=buildColumns(payload.columns||Object.keys(data[0]||{})); table=new Tabulator('#muni-table',{ data, layout:'fitData', pagination:true, paginationSize:300, movableColumns:true, initialSort:[], columnDefaults:{resizable:true,minWidth:140}, columns:cols }); table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); }); table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData()))); table.on('columnResized',syncTopScrollWidth); table.on('columnMoved',syncTopScrollWidth); table.on('renderComplete',syncTopScrollWidth); }
     function applyFilters(){
       const title=document.getElementById('flt-title').value.trim().toLowerCase();
       const actor=document.getElementById('flt-actor').value.trim().toLowerCase();
       const country=document.getElementById('flt-country').value.trim().toLowerCase();
-      const website=document.getElementById('flt-website').value.trim().toLowerCase();
-      const hasWebsite=document.getElementById('chk-has-website').checked;
+      const link=document.getElementById('flt-link').value.trim().toLowerCase();
       const govOnly=document.getElementById('chk-gov-only').checked;
       table.setFilter(row=>{
         if(title && !(String(row.post_title||'').toLowerCase().includes(title))) return false;
         if(actor && !(String(row.group_name||row.actor||'').toLowerCase().includes(actor))) return false;
         if(country && !(String(row.country||'').toLowerCase().includes(country))) return false;
-        if(website && !(String(row.website||'').toLowerCase().includes(website))) return false;
-        if(hasWebsite && !String(row.website||'').trim()) return false;
+        if(link && !(String(row.Link||row.link||row.domain_name||'').toLowerCase().includes(link))) return false;
         if(govOnly && govColumn && row[govColumn] !== 'True') return false;
         return true;
       });
     }
     function attachFilterHandlers(){
-      ['flt-title','flt-actor','flt-country','flt-website','chk-has-website','chk-gov-only'].forEach(id=>{
-        document.getElementById(id).addEventListener('input',applyFilters);
+      ['flt-title','flt-actor','flt-country','flt-link','chk-gov-only'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el) return;
+        el.addEventListener('input',applyFilters);
       });
       document.getElementById('btn-reset').addEventListener('click',()=>{
-        ['flt-title','flt-actor','flt-country','flt-website'].forEach(id=>document.getElementById(id).value='');
-        document.getElementById('chk-has-website').checked=false;
+        ['flt-title','flt-actor','flt-country','flt-link'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('chk-gov-only').checked=false;
         table.clearFilter();
         updateStats(table.getData());

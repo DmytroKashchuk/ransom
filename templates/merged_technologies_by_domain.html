@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Merged Technologies by Domain</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:#0f172a; color:#0b1220; }
+    .page { width:100%; max-width:100%; padding:18px 20px 70px; }
+    .panel { background:#ffffff; border-radius:16px; padding:22px 24px 30px; box-shadow:0 12px 32px -10px rgba(0,0,0,0.32); }
+    .headline { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:flex-end; margin:0 0 14px; }
+    .headline h1 { margin:0; font-size:1.9rem; color:#0f172a; }
+    .stats { display:flex; flex-wrap:wrap; gap:14px; margin:6px 0 18px; }
+    .stat { background:#f1f5f9; padding:12px 14px; border-radius:12px; min-width:150px; font-size:13px; line-height:1.35; box-shadow:inset 0 1px 0 #fff; }
+    .stat strong { display:block; font-size:22px; color:#0f172a; }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 14px; }
+    .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; min-width:170px; font-size:14px; background:#f8fafc; }
+    .filter-input:focus { outline:2px solid #6366f1; outline-offset:1px; }
+    .btn { padding:10px 14px; border-radius:10px; border:1px solid #6366f1; background:#6366f1; color:#fff; cursor:pointer; font-weight:600; }
+    .btn-alt { background:#475569; border-color:#475569; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; display:none; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#f1f5f9; }
+    .detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; margin-top:14px; }
+    .card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; box-shadow:0 10px 24px -16px rgba(0,0,0,0.18); }
+    .card h3 { margin:0 0 8px; font-size:15px; color:#0f172a; }
+    .detail-search { display:flex; align-items:center; gap:10px; margin:6px 0 4px; }
+    .detail-search input { padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; min-width:220px; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="page">
+    <div class="panel">
+      <div class="headline">
+        <h1>Merged Technologies by Domain</h1>
+        <button id="download-csv" class="btn" type="button">Download CSV</button>
+      </div>
+
+      <div class="stats" id="stats">
+        <div class="stat">Domains<br><strong id="stat-domains">0</strong></div>
+        <div class="stat">Hacked domains<br><strong id="stat-hacked">0</strong></div>
+        <div class="stat">Avg HTTP tech<br><strong id="stat-avg-http">0</strong></div>
+        <div class="stat">Avg SWDB tech<br><strong id="stat-avg-swdb">0</strong></div>
+        <div class="stat">Avg overlap<br><strong id="stat-avg-overlap">0</strong></div>
+      </div>
+
+      <div class="filters">
+        <input id="filter-domain" class="filter-input" placeholder="Domain contains" />
+        <input id="filter-min-overlap" class="filter-input" type="number" min="0" placeholder="Min overlap" />
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+          <input id="filter-hacked" type="checkbox" /> Hacked only
+        </label>
+        <button id="clear-filters" class="btn-alt btn" type="button">Reset</button>
+      </div>
+
+      <div id="top-scroll" class="top-scroll"><div id="top-scroll-spacer"></div></div>
+      <div id="table"></div>
+
+      <div class="detail-search">
+        <label for="detail-search-input" style="font-size:13px; color:#0f172a;">Search technologies (detail tables)</label>
+        <input id="detail-search-input" placeholder="Type to search..." />
+      </div>
+      <div class="detail-grid">
+        <div class="card">
+          <h3>HTTP Archive Technologies</h3>
+          <div id="http-table"></div>
+        </div>
+        <div class="card">
+          <h3>SWDB 2022 Technologies</h3>
+          <div id="swdb-table"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let httpTable; let swdbTable; let payloadStats={};
+
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+
+    function fmt(num){ if(num==null || Number.isNaN(num)) return '-'; const n=Number(num); return Number.isInteger(n)? n : n.toFixed(1); }
+
+    function updateStats(data){
+      const domains=data.length;
+      const hacked=data.filter(r=>r.hacked).length;
+      const avgHttp=data.reduce((s,r)=>s+(Number(r.http_count)||0),0)/(domains||1);
+      const avgSwdb=data.reduce((s,r)=>s+(Number(r.swdb_count)||0),0)/(domains||1);
+      const avgOverlap=data.reduce((s,r)=>s+(Number(r.overlap_count)||0),0)/(domains||1);
+      document.getElementById('stat-domains').textContent=payloadStats.domains ?? domains;
+      document.getElementById('stat-hacked').textContent=hacked;
+      document.getElementById('stat-avg-http').textContent=fmt(payloadStats.avg_http_tech ?? avgHttp);
+      document.getElementById('stat-avg-swdb').textContent=fmt(payloadStats.avg_swdb_tech ?? avgSwdb);
+      document.getElementById('stat-avg-overlap').textContent=fmt(payloadStats.avg_overlap ?? avgOverlap);
+    }
+
+    function setDetail(row){
+      const data=row || {};
+      const overlap=new Set(data.overlap||[]);
+
+      const httpRows=(data.http_technologies||[]).map(name=>({ name, status: overlap.has(name)?'Common':'HTTP only' }));
+      const swdbRows=(data.swdb_technologies||[]).map(name=>({ name, status: overlap.has(name)?'Common':'SWDB only' }));
+
+      if(!httpTable){
+        httpTable=new Tabulator('#http-table',{ data:httpRows, layout:'fitColumns', height:'380px', columns:[
+          {title:'Technology', field:'name'},
+          {title:'Status', field:'status'},
+        ]});
+      } else { httpTable.setData(httpRows); }
+
+      if(!swdbTable){
+        swdbTable=new Tabulator('#swdb-table',{ data:swdbRows, layout:'fitColumns', height:'380px', columns:[
+          {title:'Technology', field:'name'},
+          {title:'Status', field:'status'},
+        ]});
+      } else { swdbTable.setData(swdbRows); }
+    }
+
+    function attachDetailSearch(){
+      const input=document.getElementById('detail-search-input');
+      if(!input) return;
+      input.addEventListener('input',()=>{
+        const term=input.value.trim().toLowerCase();
+        const filterFn=data=>{
+          if(!term) return true;
+          const name=(data.name||'').toLowerCase();
+          return name.includes(term);
+        };
+        if(httpTable){ httpTable.setFilter(filterFn); }
+        if(swdbTable){ swdbTable.setFilter(filterFn); }
+      });
+    }
+
+    function applyFilters(){
+      const domain=document.getElementById('filter-domain').value.trim().toLowerCase();
+      const minOverlapRaw=document.getElementById('filter-min-overlap').value.trim();
+      const minOverlap=minOverlapRaw===''? null: Number(minOverlapRaw);
+      const hackedOnly=document.getElementById('filter-hacked').checked;
+      table.setFilter(row=>{
+        if(domain && !(String(row.site_url||'').toLowerCase().includes(domain))) return false;
+        if(hackedOnly && !row.hacked) return false;
+        if(minOverlap!==null && Number(row.overlap_count||0) < minOverlap) return false;
+        return true;
+      });
+    }
+
+    function attachFilters(){
+      ['filter-domain','filter-min-overlap'].forEach(id=>{
+        const el=document.getElementById(id); if(el) el.addEventListener('input',applyFilters);
+      });
+      const hackedEl=document.getElementById('filter-hacked');
+      if(hackedEl) hackedEl.addEventListener('change',applyFilters);
+      const reset=document.getElementById('clear-filters');
+      if(reset) reset.addEventListener('click',()=>{
+        ['filter-domain','filter-min-overlap'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+        const hackedEl=document.getElementById('filter-hacked'); if(hackedEl) hackedEl.checked=false;
+        table.clearFilter();
+        updateStats(table.getData());
+      });
+    }
+
+    function buildTable(data){
+      table=new Tabulator('#table',{
+        data,
+        layout:'fitData',
+        pagination:true,
+        paginationSize:200,
+        movableColumns:true,
+        initialSort:[{column:'overlap_count', dir:'desc'}],
+        columnDefaults:{resizable:true,minWidth:140},
+        columns:[
+          {title:'Domain', field:'site_url', width:220},
+          {title:'Hacked', field:'hacked', width:90},
+          {title:'# HTTP', field:'http_count', width:110, hozAlign:'right'},
+          {title:'# SWDB', field:'swdb_count', width:110, hozAlign:'right'},
+          {title:'Overlap', field:'overlap_count', width:110, hozAlign:'right'},
+          {title:'HTTP only', field:'http_only_count', width:120, hozAlign:'right'},
+          {title:'SWDB only', field:'swdb_only_count', width:120, hozAlign:'right'},
+        ],
+      });
+      table.on('rowClick',(_,row)=> setDetail(row.getData()));
+      table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); setDetail(data[0]||{}); });
+      table.on('dataFiltered',(_,rows)=>{ updateStats(rows.map(r=>r.getData())); setDetail(rows[0]? rows[0].getData():{}); });
+      table.on('columnResized',syncTopScrollWidth);
+      table.on('columnMoved',syncTopScrollWidth);
+      table.on('renderComplete',syncTopScrollWidth);
+    }
+
+    async function init(){
+      const res=await fetch('/api/http_archive/merged_technologies_by_domain');
+      const payload=await res.json();
+      if(payload.error){ document.getElementById('table').innerHTML='<div style="color:#dc2626; padding:18px;">'+payload.error+'</div>'; return; }
+      payloadStats=payload.stats||{};
+      const data=payload.data||[];
+      buildTable(data);
+      attachFilters();
+      attachDetailSearch();
+      document.getElementById('download-csv').addEventListener('click',()=>{
+        const visible=table.getColumns().filter(c=>c.isVisible && c.isVisible()).map(c=>c.getField()).filter(Boolean);
+        table.download('csv','merged_technologies_by_domain.csv',{columns:visible,rowRange:'active'});
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

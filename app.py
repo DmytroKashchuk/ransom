@@ -1,7 +1,7 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 from markupsafe import Markup
 from datetime import datetime
-import os, json, math
+import os, json, math, subprocess, ast, re
 import numpy as np
 import pandas as pd
 import markdown
@@ -23,6 +23,7 @@ def intro_page():
 
 # Path to the CSV file
 CSV_PATH = 'data/ransomed_domains_in_swdb_with_accounts.csv'
+RANSOMWARE_LIVE_URL = "https://data.ransomware.live/victims.csv"
 HTTP_ARCHIVE_TECH_CSV = os.path.join(
     app.root_path,
     'data',
@@ -40,6 +41,41 @@ HTTP_ARCHIVE_TECH_NO_ROOT_V2_CSV = os.path.join(
     'data',
     'http_archive',
     'bq-results-municipalities_grouped_tech_cat_ver_excluding_root_page_v2.csv'
+)
+HTTP_ARCHIVE_MUNI_TECH_RAW_CSV = os.path.join(
+    app.root_path,
+    'data',
+    'http_archive',
+    'bq-results-municipalities_5months_before_and_after_continued.csv'
+)
+HTTP_ARCHIVE_MUNI_TECH_REDUCED_CSV = os.path.join(
+    app.root_path,
+    'data',
+    'http_archive',
+    'bq-results-municipalities_5months_before_and_after_continued_reduced_by_dropping_root_page.csv'
+)
+HTTP_ARCHIVE_MUNI_JACCARD_ATTACK_CSV = os.path.join(
+    app.root_path,
+    'data',
+    'http_archive',
+    'muni_tech_jaccard_similarity_attack.csv'
+)
+HTTP_ARCHIVE_MUNI_ADDED_DROPPED_CSV = os.path.join(
+    app.root_path,
+    'data',
+    'http_archive',
+    'muni_tech_added_dropped.csv'
+)
+HTTP_ARCHIVE_MUNI_ADDED_DROPPED_3RD_CSV = os.path.join(
+    app.root_path,
+    'data',
+    'http_archive',
+    'muni_tech_added_dropped_3rd_month.csv'
+)
+HTTP_ARCHIVE_MERGED_TECH_BY_DOMAIN_CSV = os.path.join(
+    app.root_path,
+    'data',
+    'merged_technologies_by_domain.csv'
 )
 
 
@@ -136,6 +172,26 @@ def _safe_datetime(val):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+def _ransomware_live_path():
+    """Return the existing ransomware live CSV path, preferring typo file name for compatibility."""
+    candidates = [
+        os.path.join(app.root_path, 'data', 'ransomware_live.csv'),
+        os.path.join(app.root_path, 'data', 'ranomware_live.csv'),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def _file_mtime_iso(path):
+    try:
+        ts = os.path.getmtime(path)
+        return datetime.fromtimestamp(ts).isoformat()
+    except Exception:
+        return None
 
 # New page: SWDB domains overview
 @app.route('/swdb')
@@ -237,6 +293,7 @@ def get_swdb_preview_usa():
         column_names = set()
 
         for collection_name, meta in raw_payload.items():
+
             if not isinstance(meta, dict):
                 continue
 
@@ -346,6 +403,98 @@ def get_swdb_preview_usa():
         return jsonify({'error': f'Failed to load swdb preview JSON: {e}'}), 500
 
 
+@app.route('/api/http_archive/merged_technologies_by_domain')
+def get_http_archive_merged_technologies_by_domain():
+    try:
+        path = HTTP_ARCHIVE_MERGED_TECH_BY_DOMAIN_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+
+        def parse_list(val):
+            if val is None or (isinstance(val, float) and math.isnan(val)):
+                return []
+            if isinstance(val, list):
+                return [str(x).strip() for x in val if str(x).strip()]
+            s = str(val).strip()
+            if s.startswith('[') and s.endswith(']'):
+                try:
+                    parsed = ast.literal_eval(s)
+                    if isinstance(parsed, list):
+                        return [str(x).strip() for x in parsed if str(x).strip()]
+                except Exception:
+                    pass
+            parts = re.split(r'[;,]', s)
+            return [p.strip() for p in parts if p.strip()]
+
+        def uniq_preserve(seq):
+            seen = set()
+            out = []
+            for item in seq:
+                if item not in seen:
+                    seen.add(item)
+                    out.append(item)
+            return out
+
+        records = []
+        hacked_domains = 0
+        http_counts = []
+        swdb_counts = []
+        overlap_counts = []
+
+        for rec in df.to_dict('records'):
+            site = rec.get('site_url') or rec.get('domain_name')
+            http_list = uniq_preserve(parse_list(rec.get('http_arch_technologies')))
+            swdb_list = uniq_preserve(parse_list(rec.get('swdb_2022_technologies')))
+            http_set = set(http_list)
+            swdb_set = set(swdb_list)
+            overlap = sorted(http_set & swdb_set)
+            only_http = sorted(http_set - swdb_set)
+            only_swdb = sorted(swdb_set - http_set)
+            hacked_val = str(rec.get('Hacked') or '').strip().lower()
+            hacked = hacked_val in {'1', 'true', 'yes', 'y', 't'}
+            if hacked:
+                hacked_domains += 1
+            http_counts.append(len(http_list))
+            swdb_counts.append(len(swdb_list))
+            overlap_counts.append(len(overlap))
+            records.append({
+                'site_url': site,
+                'hacked': hacked,
+                'http_technologies': sorted(http_list),
+                'swdb_technologies': sorted(swdb_list),
+                'overlap': overlap,
+                'only_http': only_http,
+                'only_swdb': only_swdb,
+                'http_count': len(http_list),
+                'swdb_count': len(swdb_list),
+                'overlap_count': len(overlap),
+                'http_only_count': len(only_http),
+                'swdb_only_count': len(only_swdb),
+            })
+
+        def avg(vals):
+            vals = [v for v in vals if v is not None]
+            return float(sum(vals)) / len(vals) if vals else None
+
+        stats = {
+            'domains': len(records),
+            'hacked_domains': hacked_domains,
+            'avg_http_tech': avg(http_counts),
+            'avg_swdb_tech': avg(swdb_counts),
+            'avg_overlap': avg(overlap_counts),
+        }
+
+        payload = {'data': records, 'stats': stats}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load merged technologies by domain: {e}'}), 500
+
 
 # API for temple_db.csv (historical incidents)
 @app.route('/api/temple')
@@ -378,12 +527,7 @@ def temple_page():
 @app.route('/api/ransomware_live')
 def get_ransomware_live():
     try:
-        # Accept either correct or current typo filename
-        candidates = [
-            os.path.join(app.root_path, 'data', 'ransomware_live.csv'),
-            os.path.join(app.root_path, 'data', 'ranomware_live.csv'),
-        ]
-        path = next((p for p in candidates if os.path.exists(p)), None)
+        path = _ransomware_live_path()
         if not path:
             return jsonify({'error': 'ransomware_live CSV not found (looked for ransomware_live.csv / ranomware_live.csv)'}), 404
         df = pd.read_csv(path)
@@ -442,6 +586,54 @@ def get_ransom_grained():
         return app.response_class(dumped, mimetype='application/json')
     except Exception as e:
         return jsonify({'error': f'Failed to load ransom_grained_db CSV: {e}'}), 500
+
+@app.route('/api/ransomware_live/last_updated')
+def ransomware_live_last_updated():
+    path = _ransomware_live_path()
+    if not path or not os.path.exists(path):
+        return jsonify({'error': 'ransomware_live CSV not found'}), 404
+    updated_at = _file_mtime_iso(path)
+    size = None
+    try:
+        size = os.path.getsize(path)
+    except Exception:
+        pass
+    return jsonify({
+        'path': os.path.relpath(path, app.root_path),
+        'updated_at': updated_at,
+        'size_bytes': size,
+    })
+
+
+@app.route('/api/ransomware_live/refresh', methods=['POST'])
+def refresh_ransomware_live():
+    dest_path = os.path.join(app.root_path, 'data', 'ranomware_live.csv')
+    cmd = ['curl', '-L', RANSOMWARE_LIVE_URL, '-o', dest_path]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except Exception as e:
+        return jsonify({'error': f'Failed to execute curl: {e}'}), 500
+
+    if result.returncode != 0:
+        stderr = (result.stderr or '').strip()
+        return jsonify({'error': f'curl failed with code {result.returncode}', 'stderr': stderr}), 500
+
+    if not os.path.exists(dest_path):
+        return jsonify({'error': 'Download reported success but file is missing'}), 500
+
+    updated_at = _file_mtime_iso(dest_path)
+    size = None
+    try:
+        size = os.path.getsize(dest_path)
+    except Exception:
+        pass
+
+    return jsonify({
+        'status': 'ok',
+        'path': os.path.relpath(dest_path, app.root_path),
+        'updated_at': updated_at,
+        'size_bytes': size,
+    })
 
 @app.route('/ransom_grained')
 def ransom_grained_page():
@@ -707,6 +899,108 @@ def get_all_databases():
 def all_databases_page():
     return render_template('all_databases.html')
 
+
+# ================= Detailed Databases (6-table drill-down) =================
+def _load_csv_safe(path, selected_cols=None, rename_dots=False):
+    """Load a CSV, clean NaN/Inf, optionally select columns & rename dots."""
+    if not os.path.exists(path):
+        return None
+    df = pd.read_csv(path, low_memory=False)
+    df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+    # Drop completely empty columns
+    df = df.drop(columns=[c for c in df.columns if df[c].isna().all()], errors='ignore')
+    if selected_cols:
+        available = [c for c in selected_cols if c in df.columns]
+        df = df[available]
+    if rename_dots:
+        df.columns = [c.replace('.', '_').replace('-', '_') for c in df.columns]
+    df = df.replace({'': None})
+    df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+    records = df.to_dict('records')
+    for r in records:
+        for k, v in list(r.items()):
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                r[k] = None
+    return records
+
+
+@app.route('/api/detailed_databases')
+def get_detailed_databases():
+    """Return all 6 ransomware databases with selected columns for the detailed overview page."""
+    try:
+        result = {}
+
+        # 1. Temple DB
+        temple_path = os.path.join(app.root_path, 'data', 'temple_db.csv')
+        result['temple'] = _load_csv_safe(temple_path, selected_cols=[
+            'id', 'date_began', 'year', 'org_name', 'location',
+            'primary_ci_sector', 'secondary_ci_sector', 'strain_group',
+            'mitre_attack_id', 'duration', 'duration_rank',
+            'ransom_amount', 'local_currency', 'ransom_scale',
+            'paid_status', 'pay_method', 'amount_paid', 'source', 'comments'
+        ]) or []
+
+        # 2. Ransomware Live
+        rl_path = _ransomware_live_path()
+        result['ransomware_live'] = _load_csv_safe(rl_path, selected_cols=[
+            'post_title', 'group_name', 'discovered', 'description',
+            'published', 'post_url', 'country', 'activity', 'website'
+        ]) if rl_path else []
+
+        # 3. Grained DB (select key columns from 100+)
+        grained_path = os.path.join(app.root_path, 'data', 'ransom_grained_db.csv')
+        result['grained'] = _load_csv_safe(grained_path, selected_cols=[
+            'victim', 'sector', 'attacker', 'incident-date',
+            'sources', 'payment-outcome',
+            'data-destruction', 'data-exfiltration', 'data-exposure', 'data-sale',
+            'attack-vector.ransomware-variant',
+            'attacker-action.ransom-amount-usd',
+            'impact.loss-amount-usd',
+            'impact.category.Operational Impact',
+            'impact.category.Financial Loss',
+        ], rename_dots=True) or []
+
+        # 4. Maryland
+        maryland_path = os.path.join(app.root_path, 'data', 'maryland.csv')
+        result['maryland'] = _load_csv_safe(maryland_path, selected_cols=[
+            'event_date', 'reported_date', 'year', 'month',
+            'actor', 'actor_type', 'organization', 'industry',
+            'motive', 'event_type', 'event_subtype',
+            'magnitude', 'duration', 'description', 'source_url',
+            'country', 'state', 'county'
+        ]) or []
+
+        # 5. 10-K Master Records
+        tenk_path = os.path.join(app.root_path, 'data', '10k', 'master_records.csv')
+        result['tenk'] = _load_csv_safe(tenk_path) or []
+
+        # 6. 8-K Filings
+        eightk_path = os.path.join(app.root_path, 'data', '8k.csv')
+        result['eightk'] = _load_csv_safe(eightk_path) or []
+
+        # Include row counts for display
+        result['_meta'] = {
+            'temple_total': len(result['temple']),
+            'ransomware_live_total': len(result['ransomware_live']),
+            'grained_total': len(result['grained']),
+            'maryland_total': len(result['maryland']),
+            'tenk_total': len(result['tenk']),
+            'eightk_total': len(result['eightk']),
+        }
+
+        return app.response_class(
+            json.dumps(result, allow_nan=False),
+            mimetype='application/json'
+        )
+    except Exception as e:
+        return jsonify({'error': f'Failed to load detailed databases: {e}'}), 500
+
+
+@app.route('/detailed_databases')
+def detailed_databases_page():
+    return render_template('detailed_databases.html')
+
+
 # API endpoint for final_raw_merged.csv (merged datasets presence matrix)
 @app.route('/api/final_raw_merged')
 def get_final_raw_merged():
@@ -804,6 +1098,452 @@ def swdb_regions_by_year_page():
 
 
 # ================= HTTP Archive Technologies =================
+@app.route('/api/http_archive/muni_tech_raw')
+def get_http_archive_muni_tech_raw():
+    try:
+        path = HTTP_ARCHIVE_MUNI_TECH_RAW_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        records = []
+        for rec in df.to_dict('records'):
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            records.append(rec)
+        stats = {
+            'total_rows': len(records),
+            'unique_domains': len({r.get('domain_name') for r in records if r.get('domain_name')}),
+            'unique_matchids': len({r.get('Matchid') for r in records if r.get('Matchid') is not None}),
+        }
+        payload = {'data': records, 'columns': list(df.columns), 'stats': stats}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load muni tech raw CSV: {e}'}), 500
+
+
+@app.route('/api/http_archive/muni_tech_reduced')
+def get_http_archive_muni_tech_reduced():
+    try:
+        path = HTTP_ARCHIVE_MUNI_TECH_REDUCED_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        records = []
+        for rec in df.to_dict('records'):
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            records.append(rec)
+        stats = {
+            'total_rows': len(records),
+            'unique_domains': len({r.get('domain_name') for r in records if r.get('domain_name')}),
+            'unique_matchids': len({r.get('Matchid') for r in records if r.get('Matchid') is not None}),
+        }
+        payload = {'data': records, 'columns': list(df.columns), 'stats': stats}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load muni tech reduced CSV: {e}'}), 500
+
+
+@app.route('/api/http_archive/muni_tech_installs')
+def get_http_archive_muni_tech_installs():
+    try:
+        path = HTTP_ARCHIVE_MUNI_TECH_REDUCED_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        df['crawl_dt'] = pd.to_datetime(df.get('crawl_date'), errors='coerce') if 'crawl_date' in df.columns else pd.NaT
+
+        def is_hacked(val):
+            s = str(val).strip().lower()
+            return s in {'1', 'true', 'yes', 'y', 't'}
+
+        def split_values(raw):
+            if raw is None:
+                return []
+            return [p.strip() for p in re.split(r'[;,|]', str(raw)) if p.strip()]
+
+        aggregates = {}
+        all_domains = set()
+        all_links = set()
+        hacked_domains_global = set()
+
+        for rec in df.to_dict('records'):
+            tech = rec.get('technology')
+            if tech is None or str(tech).strip() == '':
+                continue
+            tech_key = str(tech).strip()
+            agg = aggregates.setdefault(tech_key, {
+                'technology': tech_key,
+                'categories_set': set(),
+                'versions_set': set(),
+                'domains': set(),
+                'links': set(),
+                'matchids': set(),
+                'hacked_domains': set(),
+                'installs': 0,
+                'first_seen': None,
+                'last_seen': None,
+            })
+
+            agg['categories_set'].update(split_values(rec.get('categories')))
+            agg['versions_set'].update(split_values(rec.get('versions')))
+
+            domain = rec.get('domain_name')
+            if domain:
+                agg['domains'].add(domain)
+                all_domains.add(domain)
+                if is_hacked(rec.get('hacked')):
+                    agg['hacked_domains'].add(domain)
+                    hacked_domains_global.add(domain)
+
+            link = rec.get('Link')
+            if link:
+                agg['links'].add(link)
+                all_links.add(link)
+
+            matchid = rec.get('Matchid')
+            if matchid not in (None, ''):
+                agg['matchids'].add(matchid)
+
+            agg['installs'] += 1
+
+            crawl_dt = rec.get('crawl_dt') if isinstance(rec, dict) else None
+            if crawl_dt is None:
+                crawl_dt = None
+            if crawl_dt is not None and isinstance(crawl_dt, str):
+                crawl_dt = pd.to_datetime(crawl_dt, errors='coerce')
+            if pd.notna(crawl_dt):
+                if agg['first_seen'] is None or crawl_dt < agg['first_seen']:
+                    agg['first_seen'] = crawl_dt
+                if agg['last_seen'] is None or crawl_dt > agg['last_seen']:
+                    agg['last_seen'] = crawl_dt
+
+        records = []
+        for val in aggregates.values():
+            records.append({
+                'technology': val['technology'],
+                'categories': '; '.join(sorted(val['categories_set'])) if val['categories_set'] else None,
+                'versions': '; '.join(sorted(val['versions_set'])) if val['versions_set'] else None,
+                'install_rows': val['installs'],
+                'unique_domains': len(val['domains']),
+                'hacked_domains': len(val['hacked_domains']),
+                'non_hacked_domains': len(val['domains']) - len(val['hacked_domains']),
+                'unique_links': len(val['links']),
+                'unique_matchids': len(val['matchids']),
+                'first_seen': val['first_seen'],
+                'last_seen': val['last_seen'],
+            })
+
+        records.sort(key=lambda r: (r.get('install_rows') or 0), reverse=True)
+
+        stats = {
+            'total_rows': len(df),
+            'technologies': len(records),
+            'total_installs': sum(r.get('install_rows') or 0 for r in records),
+            'unique_domains': len(all_domains),
+            'hacked_domains': len(hacked_domains_global),
+            'unique_links': len(all_links),
+        }
+
+        payload = {'data': records, 'stats': stats}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to build muni tech installs: {e}'}), 500
+
+
+@app.route('/api/http_archive/muni_tech_jaccard_similarity_attack')
+def get_http_archive_muni_tech_jaccard_similarity_attack():
+    try:
+        path = HTTP_ARCHIVE_MUNI_JACCARD_ATTACK_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        list_cols = [
+            '1_m_before', '2_m_before', '3_m_before', '4_m_before', 'attack_month_tech',
+            '1_m_after_tech', '2_m_after_tech', '3_m_after_tech', '4_m_after_tech',
+            '1_m_before_tech_dropped', '1_m_before_tech_added', '2_m_before_tech_dropped', '2_m_before_tech_added',
+            '3_m_before_tech_dropped', '3_m_before_tech_added', '4_m_before_tech_dropped', '4_m_before_tech_added',
+            '1_m_after_tech_dropped', '1_m_after_tech_added', '2_m_after_tech_dropped', '2_m_after_tech_added',
+            '3_m_after_tech_dropped', '3_m_after_tech_added', '4_m_after_tech_dropped'
+        ]
+        jaccard_cols = [
+            'jaccard_attack_4m_before', 'jaccard_attack_3m_before', 'jaccard_attack_2m_before', 'jaccard_attack_1m_before',
+            'jaccard_attack_1m_after', 'jaccard_attack_2m_after', 'jaccard_attack_3m_after', 'jaccard_attack_4m_after', 'average_jaccard_before_attack','average_jaccard_after_attack'
+        ]
+
+        def parse_list_like(val):
+            if val is None:
+                return None
+            if isinstance(val, str) and val.strip().startswith('[') and val.strip().endswith(']'):
+                try:
+                    parsed = ast.literal_eval(val)
+                    if isinstance(parsed, list):
+                        return '; '.join(str(x) for x in parsed)
+                except Exception:
+                    return val
+            return val
+
+        for col in list_cols:
+            if col in df.columns:
+                df[col] = df[col].apply(parse_list_like)
+
+        for col in jaccard_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+
+        records = []
+        for rec in df.to_dict('records'):
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            records.append(rec)
+
+        hacked_vals = [str(r.get('Hacked') or '').strip().lower() for r in records]
+        hacked_count = sum(1 for v in hacked_vals if v in {'1', 'true', 'yes', 'y', 't'})
+        stats = {
+            'total_rows': len(records),
+            'unique_links': len({r.get('Link') for r in records if r.get('Link')}),
+            'hacked_rows': hacked_count,
+        }
+
+        payload = {'data': records, 'columns': list(df.columns), 'stats': stats}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load muni tech Jaccard CSV: {e}'}), 500
+
+
+@app.route('/api/http_archive/muni_tech_added_dropped')
+def get_http_archive_muni_tech_added_dropped():
+    try:
+        path = HTTP_ARCHIVE_MUNI_ADDED_DROPPED_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+
+        numeric_cols = [
+            'n_times_added_before_attack',
+            'n_times_dropped_before_attack',
+            'n_times_added_after_attack',
+            'n_times_dropped_after_attack',
+        ]
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+
+        records = []
+        for rec in df.to_dict('records'):
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            records.append(rec)
+
+        def safe_sum(col):
+            if col not in df.columns:
+                return None
+            series = pd.to_numeric(df[col], errors='coerce')
+            finite = series[np.isfinite(series)]
+            return int(finite.sum()) if not finite.isna().all() else None
+
+        stats = {
+            'row_count': len(records),
+            'unique_technologies': len({r.get('technology') for r in records if r.get('technology')}),
+            'total_added_before': safe_sum('n_times_added_before_attack'),
+            'total_dropped_before': safe_sum('n_times_dropped_before_attack'),
+            'total_added_after': safe_sum('n_times_added_after_attack'),
+            'total_dropped_after': safe_sum('n_times_dropped_after_attack'),
+        }
+
+        payload = {'data': records, 'columns': list(df.columns), 'stats': stats}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load muni tech added/dropped CSV: {e}'}), 500
+
+
+@app.route('/api/http_archive/muni_tech_added_dropped_3rd_month')
+def get_http_archive_muni_tech_added_dropped_3rd_month():
+    try:
+        path = HTTP_ARCHIVE_MUNI_ADDED_DROPPED_3RD_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+
+        numeric_cols = [
+            'n_times_added_before_attack',
+            'n_times_dropped_before_attack',
+            'n_times_added_after_attack',
+            'n_times_dropped_after_attack',
+        ]
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+
+        records = []
+        for rec in df.to_dict('records'):
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            records.append(rec)
+
+        def safe_sum(col):
+            if col not in df.columns:
+                return None
+            series = pd.to_numeric(df[col], errors='coerce')
+            finite = series[np.isfinite(series)]
+            return int(finite.sum()) if not finite.isna().all() else None
+
+        stats = {
+            'row_count': len(records),
+            'unique_technologies': len({r.get('technology') for r in records if r.get('technology')}),
+            'total_added_before': safe_sum('n_times_added_before_attack'),
+            'total_dropped_before': safe_sum('n_times_dropped_before_attack'),
+            'total_added_after': safe_sum('n_times_added_after_attack'),
+            'total_dropped_after': safe_sum('n_times_dropped_after_attack'),
+        }
+
+        payload = {'data': records, 'columns': list(df.columns), 'stats': stats}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load muni tech added/dropped 3rd-month CSV: {e}'}), 500
+
+
+@app.route('/api/http_archive/muni_tech_reduced/pivot')
+def pivot_http_archive_muni_tech_reduced():
+    mode = request.args.get('mode', 'tech').strip().lower()
+    valid_modes = {'tech', 'cat', 'tech_ver'}
+    if mode not in valid_modes:
+        return jsonify({'error': f"Invalid mode '{mode}'. Choose one of {sorted(valid_modes)}"}), 400
+    try:
+        path = HTTP_ARCHIVE_MUNI_TECH_REDUCED_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        df = df.dropna(subset=['Link'])
+
+        def target_series(frame):
+            if mode == 'tech':
+                return frame['technology']
+            if mode == 'cat':
+                return frame['categories']
+            tech = frame.get('technology')
+            ver = frame.get('versions')
+            if tech is None:
+                return pd.Series([None] * len(frame))
+            return tech.fillna('').astype(str) + '|' + (frame.get('versions').fillna('').astype(str) if 'versions' in frame.columns else '')
+
+        values = target_series(df)
+        mask = values.notna() & values.astype(str).str.len().gt(0)
+        df_filtered = df[mask]
+        values_filtered = values[mask]
+        if df_filtered.empty:
+            return jsonify({'error': 'No data available to pivot for the selected mode'}), 400
+        pivot = pd.crosstab(index=df_filtered['Link'], columns=values_filtered)
+        pivot = (pivot > 0).astype(int)
+        pivot.reset_index(inplace=True)
+        pivot = pivot.rename(columns={'Link': 'website'})
+        csv_data = pivot.to_csv(index=False)
+        return app.response_class(csv_data, mimetype='text/csv')
+    except Exception as e:
+        return jsonify({'error': f'Failed to build pivot: {e}'}), 500
+
+
+@app.route('/api/http_archive/muni_tech_reduced/domain/<path:domain>')
+def get_http_archive_muni_tech_reduced_domain(domain):
+    try:
+        path = HTTP_ARCHIVE_MUNI_TECH_REDUCED_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        if 'domain_name' not in df.columns:
+            return jsonify({'error': 'domain_name column missing'}), 400
+        mask = df['domain_name'].astype(str).str.lower() == str(domain).lower()
+        subset = df[mask]
+        if subset.empty:
+            return jsonify({'error': f'No records found for {domain}'}), 404
+        # Clean NaN/Inf
+        records = []
+        for rec in subset.to_dict('records'):
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            records.append(rec)
+        years = sorted({str(rec.get('crawl_date'))[:4] for rec in records if rec.get('crawl_date')}, reverse=True)
+        months = sorted({str(rec.get('crawl_date'))[:7] for rec in records if rec.get('crawl_date')}, reverse=True)
+        payload = {'data': records, 'years': years, 'months': months, 'domain': domain}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load domain timeline: {e}'}), 500
+
+
+@app.route('/api/http_archive/muni_tech_reduced/match/<path:matchid>')
+def get_http_archive_muni_tech_reduced_match(matchid):
+    try:
+        path = HTTP_ARCHIVE_MUNI_TECH_REDUCED_CSV
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        if 'Matchid' not in df.columns:
+            return jsonify({'error': 'Matchid column missing'}), 400
+        mask = df['Matchid'].astype(str).str.lower() == str(matchid).lower()
+        subset = df[mask]
+        if subset.empty:
+            return jsonify({'error': f'No records found for Matchid {matchid}'}), 404
+        records = []
+        for rec in subset.to_dict('records'):
+            for k, v in list(rec.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    rec[k] = None
+            records.append(rec)
+        months = sorted({str(rec.get('crawl_date'))[:7] for rec in records if rec.get('crawl_date')}, reverse=True)
+        payload = {'data': records, 'months': months, 'matchid': matchid}
+        clean_payload = _clean_for_json(payload)
+        return app.response_class(json.dumps(clean_payload, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load match timeline: {e}'}), 500
+
+
 @app.route('/api/http_archive/tech_grouped')
 def get_http_archive_tech_grouped():
     try:
@@ -1191,6 +1931,56 @@ def http_archive_technologies_no_root_v2_page():
 @app.route('/http_archive/technologies_no_root_v2/<path:domain>')
 def http_archive_technologies_no_root_v2_timeline_page(domain):
     return render_template('http_archive_timeline_no_root_v2.html', domain=domain)
+
+
+@app.route('/http_archive/muni_tech_raw')
+def http_archive_muni_tech_raw_page():
+    return render_template('http_archive_muni_tech_raw.html')
+
+
+@app.route('/http_archive/muni_tech_reduced')
+def http_archive_muni_tech_reduced_page():
+    return render_template('http_archive_muni_tech_reduced.html')
+
+
+@app.route('/http_archive/muni_tech_installs')
+def http_archive_muni_tech_installs_page():
+    return render_template('http_archive_muni_tech_installs.html')
+
+
+@app.route('/http_archive/merged_technologies_by_domain')
+def http_archive_merged_technologies_by_domain_page():
+    return render_template('merged_technologies_by_domain.html')
+
+
+@app.route('/http_archive/muni_tech_jaccard_similarity_attack')
+def http_archive_muni_tech_jaccard_similarity_attack_page():
+    return render_template('http_archive_muni_tech_jaccard_similarity_attack.html')
+
+
+@app.route('/http_archive/muni_tech_added_dropped')
+def http_archive_muni_tech_added_dropped_page():
+    return render_template('http_archive_muni_tech_added_dropped.html')
+
+
+@app.route('/http_archive/muni_tech_added_dropped_3rd_month')
+def http_archive_muni_tech_added_dropped_3rd_month_page():
+    return render_template('http_archive_muni_tech_added_dropped_3rd_month.html')
+
+
+@app.route('/http_archive/muni_tech_reduced_matchpair')
+def http_archive_muni_tech_reduced_matchpair_page():
+    return render_template('http_archive_muni_tech_reduced_matchpair.html')
+
+
+@app.route('/http_archive/muni_tech_reduced_matchpair/<path:matchid>')
+def http_archive_muni_tech_reduced_matchpair_timeline_page(matchid):
+    return render_template('http_archive_muni_tech_reduced_matchpair_timeline.html', matchid=matchid)
+
+
+@app.route('/http_archive/muni_tech_reduced/<path:domain>')
+def http_archive_muni_tech_reduced_timeline_page(domain):
+    return render_template('http_archive_muni_tech_reduced_timeline.html', domain=domain)
 
 
 

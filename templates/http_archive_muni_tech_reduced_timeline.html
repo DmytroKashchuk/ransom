@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Muni Tech Timeline</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    body { margin:0; background:radial-gradient(circle at 15% 20%, #111827, #0b1220 45%, #0a0f1a); color:#0b1220; }
+    .page { width:100%; max-width:100%; padding:22px 18px 70px; margin:0 auto; }
+    .panel { background:#ffffff; border-radius:18px; padding:24px 26px 32px; box-shadow:0 22px 60px -20px rgba(0,0,0,0.45); border:1px solid #e2e8f0; }
+    .headline { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:flex-end; margin:0 0 16px; }
+    .headline h1 { margin:0; font-size:2rem; color:#0f172a; letter-spacing:-0.02em; }
+    .sub { color:#475569; font-size:14px; margin-top:6px; }
+    .chips { display:flex; flex-wrap:wrap; gap:10px; margin:10px 0 18px; }
+    .chip { padding:8px 12px; border-radius:12px; background:linear-gradient(135deg,#e0f2fe,#e0e7ff); color:#0f172a; font-weight:600; box-shadow:inset 0 1px 0 #fff; }
+    .chip.attack { background:linear-gradient(135deg,#fef3c7,#fde68a); color:#92400e; border:1px solid #fcd34d; }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 18px; align-items:center; }
+    .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:12px; min-width:180px; font-size:14px; background:#f8fafc; }
+    .filter-input:focus { outline:2px solid #6366f1; outline-offset:1px; }
+    .month-checklist { display:flex; flex-wrap:wrap; gap:8px; max-width:100%; }
+    .month-check { display:flex; align-items:center; gap:6px; padding:6px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; font-size:13px; }
+    .month-check input { transform:scale(1.1); }
+    .stat-row { display:flex; flex-wrap:wrap; gap:12px; margin:12px 0 18px; }
+    .stat { background:#0f172a; color:#e2e8f0; padding:12px 14px; border-radius:14px; min-width:190px; font-size:13px; line-height:1.35; box-shadow:0 14px 30px -14px rgba(15,23,42,0.6); }
+    .stat strong { display:block; font-size:22px; color:#e0f2fe; }
+    .chart-card { background:#0f172a; border-radius:16px; padding:16px; margin:0 0 18px; box-shadow:0 14px 30px -14px rgba(15,23,42,0.8); }
+    .chart-card h3 { color:#e2e8f0; margin:0 0 10px; font-size:15px; letter-spacing:.01em; }
+    .month-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin:8px 0 10px; }
+    .month-card { border:1px solid #e2e8f0; border-radius:14px; padding:12px 14px; background:#f8fafc; box-shadow:0 10px 22px -14px rgba(0,0,0,0.2); }
+    .month-card.attack { border-color:#f59e0b; box-shadow:0 10px 24px -14px rgba(245,158,11,0.7); background:#fff7ed; }
+    .month-card h4 { margin:0 0 8px; color:#0f172a; font-size:15px; }
+    .pill-row { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
+    .pill { padding:6px 10px; border-radius:999px; background:#e0f2fe; color:#0f172a; font-size:12px; font-weight:600; border:1px solid #cbd5e1; }
+    .pill.added { background:#dcfce7; border-color:#bbf7d0; color:#166534; }
+    .pill.removed { background:#fee2e2; border-color:#fecdd3; color:#b91c1c; }
+    .section-title { margin:14px 0 6px; font-weight:700; color:#0f172a; font-size:14px; letter-spacing:.01em; }
+    .empty-card { padding:12px; border:1px dashed #cbd5e1; border-radius:12px; color:#475569; background:#f8fafc; }
+    .version-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin:8px 0 14px; }
+    .version-card { border:1px solid #e2e8f0; border-radius:14px; padding:12px 14px; background:#ffffff; box-shadow:0 10px 22px -14px rgba(0,0,0,0.18); }
+    .version-card h4 { margin:0 0 8px; color:#0f172a; font-size:15px; }
+    .timeline-line { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; color:#0f172a; }
+    .timeline-line .dot { width:9px; height:9px; border-radius:50%; background:#6366f1; display:inline-block; }
+    .timeline-line .ver { padding:5px 9px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:10px; font-weight:600; }
+    .timeline-line .month { padding:4px 8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:9px; }
+    #timeline-table { margin-top:14px; height:70vh; }
+    .attack-month-row { background:linear-gradient(90deg, rgba(253,230,138,0.35), rgba(255,255,255,0.3)); }
+    .mini-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; }
+    .mini-table th, .mini-table td { border:1px solid #e2e8f0; padding:6px 8px; text-align:left; }
+    .mini-table th { background:#0f172a; color:#e2e8f0; font-weight:700; }
+    .mini-table tr:nth-child(even) td { background:#f8fafc; }
+    .badge { display:inline-block; padding:4px 8px; border-radius:10px; font-weight:700; font-size:11px; }
+    .badge.added { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+    .badge.removed { background:#fee2e2; color:#b91c1c; border:1px solid #fecdd3; }
+    .badge.upgraded { background:#ede9fe; color:#5b21b6; border:1px solid #c4b5fd; }
+    .badge.stable { background:#e2e8f0; color:#0f172a; border:1px solid #cbd5e1; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="page">
+    <div class="panel">
+      <div class="headline">
+        <div>
+          <h1>Technology History</h1>
+          <div class="sub">Domain: {{ domain }}</div>
+        </div>
+        <div class="stat-row">
+          <div class="stat">Rows<br><strong id="stat-rows">0</strong></div>
+          <div class="stat">Unique tech<br><strong id="stat-tech">0</strong></div>
+          <div class="stat">Months<br><strong id="stat-months">0</strong></div>
+          <div class="stat">Tech with upgrades<br><strong id="stat-upgrades">0</strong></div>
+        </div>
+      </div>
+      <div class="chips">
+        <div class="chip">See monthly stacks of tech</div>
+        <div class="chip">Diff highlights: added vs removed</div>
+        <div id="attack-chip" class="chip attack" style="display:none;"></div>
+      </div>
+      <div class="filters">
+        <div id="month-checklist" class="month-checklist"></div>
+        <button id="btn-download" class="filter-input" style="min-width:180px; background:#6366f1; color:#fff; border-color:#6366f1; cursor:pointer;">Download CSV</button>
+      </div>
+      <div class="chart-card">
+        <h3>Captures per month</h3>
+        <canvas id="month-chart" height="110"></canvas>
+      </div>
+      <div class="section-title">Monthly technology sets</div>
+      <div id="month-summary" class="month-grid"></div>
+      <div id="timeline-table"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    const domainValue = {{ domain|tojson }};
+    let fullData = [];
+    let table;
+    let monthChart;
+    let techVersionMap = new Map();
+    let attackMonth = null;
+
+    function monthFromDate(str){
+      if(!str) return null;
+      const m = String(str).match(/^(\d{4}-\d{2})/);
+      return m? m[1]: null;
+    }
+
+    function buildTechLabel(row){
+      const t = row.technology;
+      if(t==null || String(t).trim()==='') return '';
+      const v = row.versions;
+      const tech = String(t).trim();
+      const ver = v==null? '': String(v).trim();
+      return ver? `${tech} (${ver})` : tech;
+    }
+
+    function renderMonthChecklist(months){
+      const container = document.getElementById('month-checklist');
+      if(!container) return;
+      container.innerHTML = '';
+      if(!months || months.length===0){
+        container.innerHTML = '<div class="empty-card">No months available</div>';
+        return;
+      }
+      months.forEach(m=>{
+        const label=document.createElement('label');
+        label.className='month-check';
+        const cb=document.createElement('input');
+        cb.type='checkbox';
+        cb.value=m;
+        cb.checked=true;
+        cb.addEventListener('change', applyMonthFilter);
+        label.appendChild(cb);
+        const span=document.createElement('span');
+        span.textContent=m;
+        label.appendChild(span);
+        container.appendChild(label);
+      });
+    }
+
+    function applyMonthFilter(){
+      const cbs = Array.from(document.querySelectorAll('#month-checklist input[type="checkbox"]'));
+      const selected = cbs.filter(c=>c.checked).map(c=>c.value);
+      const filtered = selected.length>0? fullData.filter(r=> selected.includes(monthFromDate(r.crawl_date))) : fullData;
+      table.setData(filtered).then(()=>{
+        updateStats(filtered);
+        updateChart(filtered);
+        renderMonthSummary(filtered);
+        renderVersionUpgrades(filtered);
+      });
+    }
+
+    function buildTable(data){
+      table = new Tabulator('#timeline-table', {
+        data,
+        layout:'fitData',
+        pagination:true,
+        paginationSize:300,
+        movableColumns:true,
+        columnDefaults:{resizable:true,minWidth:140},
+        columns:[
+          {title:'Crawl Date', field:'crawl_date', width:130},
+          {title:'Published', field:'published', width:130},
+          {title:'Start Date', field:'start_date', width:130},
+          {title:'End Date', field:'end_date', width:130},
+          {title:'Match ID', field:'Matchid', width:120},
+          {title:'Group', field:'group_name', width:140},
+          {title:'Hacked', field:'hacked', width:100},
+          {title:'Link', field:'Link', width:200, formatter:'link', formatterParams:{urlField:'Link', labelField:'Link', target:'_blank'}},
+          {title:'Technology', field:'technology', width:220},
+          {title:'Categories', field:'categories', width:220},
+          {title:'Versions', field:'versions', width:160},
+          {title:'Post Title', field:'post_title', width:240},
+        ],
+        rowFormatter:(row)=>{
+          const pubMonth = monthFromDate(row.getData().published);
+          const el = row.getElement();
+          if(pubMonth && attackMonth && pubMonth===attackMonth){
+            el.classList.add('attack-month-row');
+          } else {
+            el.classList.remove('attack-month-row');
+          }
+        },
+      });
+      table.on('tableBuilt', ()=>{
+        updateStats(data);
+      });
+    }
+
+    function computeMonthCounts(data){
+      const counts = new Map();
+      data.forEach(r=>{
+        const m = monthFromDate(r.crawl_date);
+        if(!m) return;
+        counts.set(m, (counts.get(m)||0)+1);
+      });
+      return Array.from(counts.entries()).sort((a,b)=> a[0].localeCompare(b[0]));
+    }
+
+    function updateChart(data){
+      const entries = computeMonthCounts(data);
+      const labels = entries.map(e=>e[0]);
+      const values = entries.map(e=>e[1]);
+      const ctx = document.getElementById('month-chart');
+      if(!ctx) return;
+      if(!monthChart){
+        monthChart = new Chart(ctx, {
+          type:'bar',
+          data:{ labels, datasets:[{ label:'Captures', data:values, backgroundColor:'rgba(99,102,241,0.75)', borderRadius:6 }]},
+          options:{ plugins:{ legend:{display:false}}, scales:{ y:{ beginAtZero:true, grid:{color:'rgba(255,255,255,0.12)'}, ticks:{color:'#e2e8f0'}}, x:{ ticks:{ color:'#e2e8f0' }, grid:{ display:false } } } }
+        });
+      } else {
+        monthChart.data.labels = labels;
+        monthChart.data.datasets[0].data = values;
+        monthChart.update();
+      }
+    }
+
+    function buildMonthTechMap(data){
+      const map = new Map();
+      data.forEach(r=>{
+        const month = monthFromDate(r.crawl_date);
+        const label = buildTechLabel(r);
+        if(!month || !label) return;
+        if(!map.has(month)) map.set(month, new Set());
+        map.get(month).add(label);
+      });
+      return map;
+    }
+
+    function buildTechVersionHistory(data){
+      const map = new Map(); // tech -> Map(month -> Set(versions))
+      data.forEach(r=>{
+        const month = monthFromDate(r.crawl_date);
+        const techRaw = r.technology;
+        if(!month || techRaw==null || String(techRaw).trim()==='') return;
+        const tech = String(techRaw).trim();
+        const ver = r.versions==null? '' : String(r.versions).trim();
+        if(!map.has(tech)) map.set(tech, new Map());
+        const monthMap = map.get(tech);
+        if(!monthMap.has(month)) monthMap.set(month, new Set());
+        monthMap.get(month).add(ver);
+      });
+      return map;
+    }
+
+    function renderVersionUpgrades(data){
+      const containerId = 'version-upgrades';
+      let container = document.getElementById(containerId);
+      if(!container) return;
+      techVersionMap = buildTechVersionHistory(data);
+      const entries = Array.from(techVersionMap.entries()).map(([tech, m])=>{
+        const months = Array.from(m.keys()).sort();
+        const versions = new Set();
+        months.forEach(mo=> (m.get(mo)||[]).forEach(v=>versions.add(v||'N/A')));
+        return { tech, months, map:m, uniqueVersions:Array.from(versions) };
+      }).filter(e=> e.uniqueVersions.length>1);
+      container.innerHTML = '';
+      if(entries.length===0){
+        container.innerHTML = '<div class="empty-card">No version changes detected across months.</div>';
+        return;
+      }
+      const grid = document.createElement('div');
+      grid.className = 'version-grid';
+      entries.forEach(entry=>{
+        const card=document.createElement('div');
+        card.className='version-card';
+        const lines = entry.months.map(mo=>{
+          const vers = Array.from(entry.map.get(mo) || []).sort((a,b)=>a.localeCompare(b));
+          const verLabel = vers.map(v=> v? v : 'N/A').join(', ');
+          return `<div class="timeline-line"><span class="dot"></span><span class="month">${mo}</span><span class="ver">${verLabel}</span></div>`;
+        }).join('');
+        card.innerHTML = `<h4>${entry.tech}</h4>${lines}`;
+        grid.appendChild(card);
+      });
+      container.appendChild(grid);
+    }
+
+    function updateStats(data){
+      const months = new Set();
+      const techs = new Set();
+      data.forEach(r=>{
+        const m = monthFromDate(r.crawl_date); if(m) months.add(m);
+        if(r.technology && String(r.technology).trim()!=='') techs.add(String(r.technology).trim());
+      });
+      const versionMap = buildTechVersionHistory(data);
+      const upgrades = Array.from(versionMap.values()).filter(m=>{
+        const uniq=new Set();
+        m.forEach(set=> set.forEach(v=>uniq.add(v||'')));
+        return uniq.size>1;
+      }).length;
+      document.getElementById('stat-rows').textContent = data.length;
+      document.getElementById('stat-tech').textContent = techs.size;
+      document.getElementById('stat-months').textContent = months.size;
+      document.getElementById('stat-upgrades').textContent = upgrades;
+      const chip = document.getElementById('attack-chip');
+      if(chip){
+        if(attackMonth){
+          chip.style.display='inline-flex';
+          chip.textContent = `Attack month (published): ${attackMonth}`;
+        } else {
+          chip.style.display='none';
+        }
+      }
+    }
+
+    function mapMonthTechVersions(data){
+      const map = new Map(); // month -> Map(tech -> Set(versions))
+      data.forEach(r=>{
+        const month = monthFromDate(r.crawl_date);
+        const techRaw = r.technology;
+        if(!month || techRaw==null || String(techRaw).trim()==='') return;
+        const tech = String(techRaw).trim();
+        const ver = r.versions==null? '' : String(r.versions).trim();
+        if(!map.has(month)) map.set(month, new Map());
+        const monthMap = map.get(month);
+        if(!monthMap.has(tech)) monthMap.set(tech, new Set());
+        monthMap.get(tech).add(ver);
+      });
+      return map;
+    }
+
+    function formatVersions(set){
+      const arr = Array.from(set||[]).map(v=> v||'N/A');
+      if(arr.length===0) return 'N/A';
+      return Array.from(new Set(arr)).sort((a,b)=>a.localeCompare(b)).join(', ');
+    }
+
+    function versionsChanged(currSet, prevSet){
+      if(!prevSet) return true;
+      const a = formatVersions(currSet);
+      const b = formatVersions(prevSet);
+      return a!==b;
+    }
+
+    function renderMonthSummary(data){
+      const container = document.getElementById('month-summary');
+      if(!container) return;
+      const map = mapMonthTechVersions(data);
+      const months = Array.from(map.keys()).sort();
+      container.innerHTML = '';
+      if(months.length===0){
+        container.innerHTML = '<div class="empty-card">No monthly technology data available.</div>';
+        return;
+      }
+      let prevMap = new Map();
+      months.forEach((month)=>{
+        const currMap = map.get(month) || new Map();
+        const rows = [];
+        currMap.forEach((versSet, tech)=>{
+          const prevVers = prevMap.get(tech);
+          let status = 'stable';
+          if(!prevVers) status = 'added';
+          else if(versionsChanged(versSet, prevVers)) status = 'upgraded';
+          rows.push({tech, versions:formatVersions(versSet), status});
+        });
+        // removed techs
+        prevMap.forEach((versSet, tech)=>{
+          if(!currMap.has(tech)){
+            rows.push({tech, versions:formatVersions(versSet), status:'removed'});
+          }
+        });
+        rows.sort((a,b)=>{
+          const order = {upgraded:0, added:1, removed:2, stable:3};
+          const oa = order[a.status] ?? 99;
+          const ob = order[b.status] ?? 99;
+          if(oa!==ob) return oa-ob;
+          return a.tech.localeCompare(b.tech);
+        });
+        const card = document.createElement('div');
+        card.className = 'month-card';
+        if(attackMonth && month===attackMonth){ card.classList.add('attack'); }
+        const rowsHtml = rows.map(r=>`
+          <tr>
+            <td>${r.tech}</td>
+            <td>${r.versions}</td>
+            <td><span class="badge ${r.status}">${r.status}</span></td>
+          </tr>
+        `).join('');
+        card.innerHTML = `
+          <h4>${month}${attackMonth && month===attackMonth ? ' · Attack month' : ''}</h4>
+          <table class="mini-table">
+            <thead><tr><th>Technology</th><th>Versions</th><th>Status</th></tr></thead>
+            <tbody>${rowsHtml || '<tr><td colspan="3">No tech recorded</td></tr>'}</tbody>
+          </table>
+        `;
+        container.appendChild(card);
+        prevMap = currMap;
+      });
+    }
+
+    function downloadCSV(){
+      if(!table) return;
+      const cols = table.getColumns().map(c=>c.getField()).filter(Boolean);
+      table.download('csv', `muni_tech_timeline_${domainValue}.csv`, {columns: cols, rowRange:'active'});
+    }
+
+    async function init(){
+      const res = await fetch(`/api/http_archive/muni_tech_reduced/domain/${encodeURIComponent(domainValue)}`);
+      const payload = await res.json();
+      if(payload.error){
+        document.getElementById('timeline-table').innerHTML = `<div style="color:#dc2626; padding:18px;">${payload.error}</div>`;
+        return;
+      }
+      fullData = payload.data || [];
+      const months = (payload.months || []).map(String);
+      attackMonth = (()=>{
+        const firstPub = fullData.find(r=>r.published);
+        return firstPub? monthFromDate(firstPub.published) : null;
+      })();
+      renderMonthChecklist(months);
+      buildTable(fullData);
+      updateChart(fullData);
+      renderMonthSummary(fullData);
+      renderVersionUpgrades(fullData);
+      document.getElementById('btn-download').addEventListener('click', downloadCSV);
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
