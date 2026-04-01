@@ -1004,6 +1004,20 @@ def get_detailed_databases():
         eightk_path = os.path.join(app.root_path, 'data', '8k.csv')
         result['eightk'] = _load_csv_safe(eightk_path) or []
 
+        # 7. VERIS
+        veris_path = os.path.join(app.root_path, 'data', 'veris.csv')
+        result['veris'] = _load_csv_safe(veris_path, selected_cols=[
+            'victim_victim_id', 'victim_industry', 'victim_country',
+            'victim_state', 'victim_employee_count',
+            'security_incident', 'summary',
+            'timeline_incident_year', 'timeline_incident_month',
+            'action_malware_variety', 'action_malware_name',
+            'action_hacking_variety', 'action_social_variety',
+            'actor_external_variety', 'actor_external_motive',
+            'attribute_confidentiality_data_disclosure',
+            'impact_overall_rating', 'reference',
+        ]) or []
+
         # Include row counts for display
         result['_meta'] = {
             'temple_total': len(result['temple']),
@@ -1012,6 +1026,7 @@ def get_detailed_databases():
             'maryland_total': len(result['maryland']),
             'tenk_total': len(result['tenk']),
             'eightk_total': len(result['eightk']),
+            'veris_total': len(result['veris']),
         }
 
         return app.response_class(

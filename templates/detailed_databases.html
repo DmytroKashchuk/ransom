@@ -39,6 +39,7 @@
     .icon-maryland { background:#10b981; }
     .icon-tenk { background:#3b82f6; }
     .icon-eightk { background:#8b5cf6; }
+    .icon-veris { background:#ef4444; }
 
     /* Table wrapper */
     .table-wrap { border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }
@@ -69,13 +70,13 @@
     <div class="panel">
       <h1>🔍 Detailed Databases Overview</h1>
       <p class="sub">
-        Six ransomware databases displayed side-by-side with full record details.
+        Seven ransomware databases displayed side-by-side with full record details.
         Use the search bar to filter by <strong>entity / company name</strong> across all tables simultaneously.
         When a filter is active, all matching records are shown. Default view shows 5 records per table.
       </p>
 
       <div class="global-search-wrap">
-        <input id="global-search" placeholder="Filter by entity / company name across all 6 databases (e.g. university, hospital, acme)..." autocomplete="off" />
+        <input id="global-search" placeholder="Filter by entity / company name across all 7 databases (e.g. university, hospital, acme)..." autocomplete="off" />
         <button id="btn-search" type="button">Search</button>
         <button id="btn-clear" type="button" class="secondary">Clear</button>
       </div>
@@ -149,6 +150,17 @@
           <p class="db-desc">SEC 8-K current event filings — cybersecurity disclosures (Item 1.05) and other material events from public companies.</p>
           <div class="table-wrap"><div id="table-eightk"></div></div>
           <div class="no-match" id="nomatch-eightk">No matching records in 8-K Filings.</div>
+        </div>
+
+        <!-- 7. VERIS -->
+        <div class="db-section" id="sec-veris">
+          <div class="db-header">
+            <div class="db-title"><div class="db-icon icon-veris">⚠</div>VERIS</div>
+            <div><span class="db-badge" id="badge-veris-total"></span> <span class="db-badge match-count" id="badge-veris-match" style="display:none;"></span></div>
+          </div>
+          <p class="db-desc">VERIS Community Database (VCDB) — standardised cyber incident records with actor, action, asset, attribute, and impact details following the VERIS schema.</p>
+          <div class="table-wrap"><div id="table-veris"></div></div>
+          <div class="no-match" id="nomatch-veris">No matching records in VERIS.</div>
         </div>
       </div>
     </div>
@@ -284,6 +296,32 @@
         { title:'Item 1.05',     field:'item105',       width:90 },
         { title:'Item 8.01',     field:'item801',       width:90 },
         { title:'Filing Link',   field:'link',          width:300, formatter:'link', formatterParams:{ urlField:'link', target:'_blank' } },
+      ]
+    },
+    {
+      key: 'veris', el: 'table-veris', badge: 'badge-veris-total', matchBadge: 'badge-veris-match', noMatch: 'nomatch-veris',
+      label: 'VERIS',
+      dotColor: '#ef4444',
+      nameField: 'victim_victim_id',
+      cols: [
+        { title:'Victim',               field:'victim_victim_id',                          width:260 },
+        { title:'Industry',             field:'victim_industry',                           width:100 },
+        { title:'Country',              field:'victim_country',                            width:180 },
+        { title:'State',                field:'victim_state',                              width:130 },
+        { title:'Employees',            field:'victim_employee_count',                     width:120 },
+        { title:'Incident',             field:'security_incident',                         width:110 },
+        { title:'Year',                 field:'timeline_incident_year',                    width:70 },
+        { title:'Month',                field:'timeline_incident_month',                   width:70 },
+        { title:'Malware',              field:'action_malware_variety',                    width:180 },
+        { title:'Malware Name',         field:'action_malware_name',                       width:160 },
+        { title:'Hacking',              field:'action_hacking_variety',                    width:180 },
+        { title:'Social',               field:'action_social_variety',                     width:160 },
+        { title:'Actor',                field:'actor_external_variety',                    width:160 },
+        { title:'Motive',               field:'actor_external_motive',                     width:140 },
+        { title:'Data Disclosure',      field:'attribute_confidentiality_data_disclosure',  width:140 },
+        { title:'Impact Rating',        field:'impact_overall_rating',                     width:120 },
+        { title:'Summary',              field:'summary',                                   width:350 },
+        { title:'Reference',            field:'reference',                                 width:300, formatter:'link', formatterParams:{ urlField:'reference', target:'_blank' } },
       ]
     },
   ];
