@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EuRepoC Dataset</title>
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+  <link href="/static/css/main.css" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f3f6fa; }
+    .container { max-width:100%; padding:20px; }
+    .card { background:#fff; border-radius:14px; box-shadow:0 10px 28px rgba(0,0,0,0.08); padding:18px; }
+    h1 { margin:0 0 12px; font-size:1.6rem; }
+    .meta { background:#eef2ff; padding:10px 14px; border-radius:8px; margin:0 0 14px; font-size:0.9rem; color:#1e3a8a; line-height:1.35; }
+    .filters { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 12px; }
+    .filter-input { padding:10px; border:1px solid #d1d5db; border-radius:6px; min-width:170px; font-size:13px; }
+    .top-scroll { overflow-x:auto; overflow-y:hidden; height:14px; margin:8px 0; background:#f8f9fa; border:1px solid #e9ecef; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar { height:10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background:#c1c9d2; border-radius:6px; }
+    .top-scroll::-webkit-scrollbar-track { background:#eef1f5; }
+    .download-bar { margin:6px 0 10px; display:flex; gap:8px; }
+    .btn { padding:8px 12px; background:#1d4ed8; border:1px solid #1d4ed8; color:#fff; border-radius:6px; cursor:pointer; font-size:13px; }
+    .btn:hover { background:#1e40af; }
+    .btn-alt { background:#64748b; border-color:#64748b; }
+    .stats { display:flex; flex-wrap:wrap; gap:14px; margin:0 0 10px; }
+    .stat { background:#f1f5f9; padding:8px 12px; border-radius:8px; font-size:12px; line-height:1.2; min-width:120px; }
+    .col-picker { margin:0 0 12px; }
+  </style>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container">
+    <div class="card">
+      <h1>EuRepoC Cyber Incidents</h1>
+      <div class="meta">
+        Dataset: <code>eurepoc_data.csv</code> — European Repository of Cyber Incidents (EuRepoC). Contains detailed records of cyber operations including receiver/initiator information, attributions, political responses, MITRE ATT&CK mappings, impact indicators, and legal responses.
+      </div>
+      <div class="stats">
+        <div class="stat">Records<br><strong id="stat-rows">0</strong></div>
+        <div class="stat">Receiver Countries<br><strong id="stat-countries">0</strong></div>
+        <div class="stat">Initiator Countries<br><strong id="stat-init-countries">0</strong></div>
+        <div class="stat">Incident Types<br><strong id="stat-types">0</strong></div>
+        <div class="stat">Date Range<br><strong id="stat-dates">–</strong></div>
+      </div>
+      <div class="filters">
+        <input id="flt-name" class="filter-input" placeholder="Incident Name" />
+        <input id="flt-receiver" class="filter-input" placeholder="Receiver Name" />
+        <input id="flt-receiver-country" class="filter-input" placeholder="Receiver Country" />
+        <input id="flt-initiator" class="filter-input" placeholder="Initiator Name" />
+        <input id="flt-initiator-country" class="filter-input" placeholder="Initiator Country" />
+        <input id="flt-incident-type" class="filter-input" placeholder="Incident Type" />
+        <input id="flt-year" class="filter-input" placeholder="Start Year" />
+        <button id="btn-reset" class="btn btn-alt" type="button">Reset</button>
+      </div>
+      <div class="download-bar">
+        <button id="btn-export" class="btn" type="button">Download CSV</button>
+      </div>
+      <div class="col-picker">
+        <details class="column-picker">
+          <summary style="cursor:pointer; padding:8px 12px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px;">Columns</summary>
+          <div id="col-box" style="border:1px solid #cbd5e1; border-radius:8px; padding:10px; margin-top:8px; max-height:260px; overflow:auto; background:#fff;"></div>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button id="btn-show-all" class="btn btn-alt" type="button">Show All</button>
+            <button id="btn-hide-all" class="btn btn-alt" type="button">Hide All</button>
+          </div>
+        </details>
+      </div>
+      <div id="top-scroll" class="top-scroll" style="display:none;">
+        <div id="top-scroll-spacer"></div>
+      </div>
+      <div id="eurepoc-table"></div>
+    </div>
+    <div style="text-align:center; padding:10px 0; color:#6b7280; font-size:12px;">Data source: data/eurepoc_data.csv</div>
+  </div>
+
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script>
+    let table; let rawData=[];
+    const DEFAULT_COLS = ['ID','name','start_date','end_date','incident_type','receiver_name','receiver_country','receiver_category','initiator_name','initiator_country','initiator_category','number_of_attributions','has_disruption','data_theft','weighted_cyber_intensity','status'];
+
+    function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#eurepoc-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
+    function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#eurepoc-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#eurepoc-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
+
+    function buildTable(data){
+      const columns=[];
+      if(data && data.length){
+        const sample=data[0];
+        Object.keys(sample).forEach(k=>{
+          columns.push({ title:k, field:k, width:180, visible:DEFAULT_COLS.includes(k) });
+        });
+      }
+      table=new Tabulator('#eurepoc-table',{
+        data,
+        layout:'fitData',
+        pagination:true,
+        paginationSize:400,
+        movableColumns:true,
+        columnDefaults:{resizable:true, minWidth:140},
+        initialSort:[{column:'start_date',dir:'desc'}],
+        columns
+      });
+      table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); buildColumnPicker(); });
+      table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData())));
+      table.on('columnResized',syncTopScrollWidth);
+      table.on('columnMoved',syncTopScrollWidth);
+      table.on('renderComplete',syncTopScrollWidth);
+      attachFilters();
+    }
+
+    function updateStats(data){
+      document.getElementById('stat-rows').textContent=data.length;
+      document.getElementById('stat-countries').textContent=new Set(data.map(r=>r.receiver_country).filter(Boolean)).size;
+      document.getElementById('stat-init-countries').textContent=new Set(data.map(r=>r.initiator_country).filter(Boolean)).size;
+      document.getElementById('stat-types').textContent=new Set(data.map(r=>r.incident_type).filter(Boolean)).size;
+      const years=data.map(r=>r.start_date).filter(Boolean).map(d=>String(d).slice(0,4)).filter(y=>y.match(/^\d{4}$/));
+      if(years.length){
+        const min=Math.min(...years.map(Number));
+        const max=Math.max(...years.map(Number));
+        document.getElementById('stat-dates').textContent=min===max?String(min):min+'–'+max;
+      } else {
+        document.getElementById('stat-dates').textContent='–';
+      }
+    }
+
+    function buildColumnPicker(){
+      const box=document.getElementById('col-box');
+      if(!box||!table) return;
+      box.innerHTML='';
+      table.getColumns().forEach(col=>{
+        const f=col.getField&&col.getField();
+        if(!f) return;
+        const label=document.createElement('label');
+        label.style.cssText='display:flex;align-items:center;gap:6px;font-size:12px;margin:4px 0;';
+        const cb=document.createElement('input');
+        cb.type='checkbox';
+        cb.checked=col.isVisible();
+        cb.addEventListener('change',()=>{ cb.checked?col.show():col.hide(); setTimeout(syncTopScrollWidth,0); });
+        const span=document.createElement('span');
+        span.textContent=f;
+        label.appendChild(cb);
+        label.appendChild(span);
+        box.appendChild(label);
+      });
+    }
+
+    function attachFilters(){
+      ['flt-name','flt-receiver','flt-receiver-country','flt-initiator','flt-initiator-country','flt-incident-type','flt-year'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(el) el.addEventListener('input', applyFilters);
+      });
+      document.getElementById('btn-reset').addEventListener('click',()=>{
+        ['flt-name','flt-receiver','flt-receiver-country','flt-initiator','flt-initiator-country','flt-incident-type','flt-year'].forEach(id=>{
+          document.getElementById(id).value='';
+        });
+        table.clearFilter();
+      });
+      document.getElementById('btn-export').addEventListener('click',()=>{
+        const visibleCols=table.getColumns().filter(c=>c.isVisible&&c.isVisible()).map(c=>c.getField()).filter(Boolean);
+        table.download('csv','eurepoc_data.csv',{columns:visibleCols,rowRange:'active'});
+      });
+      document.getElementById('btn-show-all').addEventListener('click',()=>{ table.getColumns().forEach(c=>c.show()); buildColumnPicker(); setTimeout(syncTopScrollWidth,0); });
+      document.getElementById('btn-hide-all').addEventListener('click',()=>{ table.getColumns().forEach(c=>{ if(DEFAULT_COLS.includes(c.getField())) c.show(); else c.hide(); }); buildColumnPicker(); setTimeout(syncTopScrollWidth,0); });
+    }
+
+    function applyFilters(){
+      const name=document.getElementById('flt-name').value.trim().toLowerCase();
+      const receiver=document.getElementById('flt-receiver').value.trim().toLowerCase();
+      const receiverCountry=document.getElementById('flt-receiver-country').value.trim().toLowerCase();
+      const initiator=document.getElementById('flt-initiator').value.trim().toLowerCase();
+      const initiatorCountry=document.getElementById('flt-initiator-country').value.trim().toLowerCase();
+      const incidentType=document.getElementById('flt-incident-type').value.trim().toLowerCase();
+      const year=document.getElementById('flt-year').value.trim();
+      table.setFilter((row)=>{
+        if(name && !(String(row.name||'').toLowerCase().includes(name))) return false;
+        if(receiver && !(String(row.receiver_name||'').toLowerCase().includes(receiver))) return false;
+        if(receiverCountry && !(String(row.receiver_country||'').toLowerCase().includes(receiverCountry))) return false;
+        if(initiator && !(String(row.initiator_name||'').toLowerCase().includes(initiator))) return false;
+        if(initiatorCountry && !(String(row.initiator_country||'').toLowerCase().includes(initiatorCountry))) return false;
+        if(incidentType && !(String(row.incident_type||'').toLowerCase().includes(incidentType))) return false;
+        if(year && !String(row.start_date||'').startsWith(year)) return false;
+        return true;
+      });
+    }
+
+    async function init(){
+      const res=await fetch('/api/eurepoc');
+      const data=await res.json();
+      if(data.error){
+        document.getElementById('eurepoc-table').innerHTML='<div style="color:#dc2626; padding:18px;">'+data.error+'</div>';
+        return;
+      }
+      rawData=data;
+      buildTable(data);
+    }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>

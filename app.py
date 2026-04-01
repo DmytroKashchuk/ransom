@@ -823,6 +823,32 @@ def get_veris():
 def veris_page():
     return render_template('veris.html')
 
+# API endpoint for eurepoc_data.csv (EuRepoC cyber incidents)
+@app.route('/api/eurepoc')
+def get_eurepoc():
+    try:
+        path = os.path.join(app.root_path, 'data', 'eurepoc_data.csv')
+        if not os.path.exists(path):
+            return jsonify({'error': f'File not found: {path}'}), 404
+        df = pd.read_csv(path, low_memory=False)
+        df.columns = [c.strip().strip('\ufeff') for c in df.columns]
+        # Drop completely empty columns
+        df = df.drop(columns=[c for c in df.columns if df[c].isna().all()])
+        df = df.replace({'': None})
+        df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
+        records = df.to_dict('records')
+        for r in records:
+            for k, v in list(r.items()):
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    r[k] = None
+        return app.response_class(json.dumps(records, allow_nan=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': f'Failed to load eurepoc CSV: {e}'}), 500
+
+@app.route('/eurepoc')
+def eurepoc_page():
+    return render_template('eurepoc.html')
+
 # API endpoint for master_records (10-K compiled dataset)
 @app.route('/api/master_records')
 def get_master_records():
