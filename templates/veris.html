@@ -79,16 +79,54 @@
     function buildColumnPicker(){ const box=document.getElementById('col-box'); if(!box||!table) return; box.innerHTML=''; table.getColumns().forEach(col=>{ const f=col.getField&&col.getField(); if(!f) return; const label=document.createElement('label'); label.style.display='flex'; label.style.alignItems='center'; label.style.gap='6px'; label.style.fontSize='12px'; label.style.margin='4px 0'; const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=col.isVisible(); cb.addEventListener('change',()=>{ cb.checked?col.show():col.hide(); setTimeout(syncTopScrollWidth,0); }); const span=document.createElement('span'); span.textContent=f; label.appendChild(cb); label.appendChild(span); box.appendChild(label); }); }
     function attachColumnPickerButtons(){ document.getElementById('btn-show-all').addEventListener('click',()=>{ table.getColumns().forEach(c=>c.show()); buildColumnPicker(); setTimeout(syncTopScrollWidth,0); }); document.getElementById('btn-hide-all').addEventListener('click',()=>{ table.getColumns().forEach(c=>{ if(['victim_victim_id','victim_victim','victim_id','action_hacking_variety','action_malware_variety'].includes(c.getField())) c.show(); else c.hide(); }); buildColumnPicker(); setTimeout(syncTopScrollWidth,0); }); }
     function buildTable(data){
-      const columns=[];
-      if(data && data.length){
-        const sample=data[0];
-        const keys=Object.keys(sample);
-        const victimKeys=keys.filter(k=>k.startsWith('victim_'));
-        const otherKeys=keys.filter(k=>!k.startsWith('victim_'));
-        const ordered=[...victimKeys, ...otherKeys];
-        ordered.forEach(k=>{ columns.push({ title:k, field:k, width:180 }); });
-      }
-      table=new Tabulator('#veris-table',{ data, layout:'fitData', pagination:true, paginationSize:300, movableColumns:true, columnDefaults:{resizable:true,minWidth:140}, columns });
+      const columns=[
+        { title:'Victim',           field:'victim_victim_id',       width:220 },
+        { title:'Industry',         field:'victim_industry',        width:100 },
+        { title:'Country',          field:'victim_country',         width:160 },
+        { title:'State',            field:'victim_state',           width:120 },
+        { title:'Employees',        field:'victim_employee_count',  width:110 },
+        { title:'Region',           field:'victim_region',          width:100 },
+        { title:'Revenue',          field:'victim_revenue_amount',  width:120 },
+        { title:'Incident',         field:'security_incident',      width:100 },
+        { title:'Targeted',         field:'targeted',               width:90 },
+        { title:'Year',             field:'timeline_incident_year', width:70 },
+        { title:'Month',            field:'timeline_incident_month',width:70 },
+        { title:'Day',              field:'timeline_incident_day',  width:60 },
+        { title:'Compromise Unit',  field:'timeline_compromise_unit',  width:120 },
+        { title:'Compromise Value', field:'timeline_compromise_value', width:120 },
+        { title:'Discovery Unit',   field:'timeline_discovery_unit',   width:110 },
+        { title:'Discovery Value',  field:'timeline_discovery_value',  width:110 },
+        { title:'Hacking',          field:'action_hacking_variety',    width:180 },
+        { title:'Hacking Vector',   field:'action_hacking_vector',     width:150 },
+        { title:'Malware',          field:'action_malware_variety',    width:180 },
+        { title:'Malware Name',     field:'action_malware_name',       width:150 },
+        { title:'Malware Vector',   field:'action_malware_vector',     width:150 },
+        { title:'Social',           field:'action_social_variety',     width:150 },
+        { title:'Social Vector',    field:'action_social_vector',      width:130 },
+        { title:'Error',            field:'action_error_variety',      width:130 },
+        { title:'Ext. Actor',       field:'actor_external_variety',    width:150 },
+        { title:'Ext. Motive',      field:'actor_external_motive',     width:130 },
+        { title:'Actor Country',    field:'actor_external_country',    width:130 },
+        { title:'Int. Actor',       field:'actor_internal_variety',    width:130 },
+        { title:'Int. Motive',      field:'actor_internal_motive',     width:120 },
+        { title:'Assets',           field:'asset_assets',              width:180 },
+        { title:'Cloud',            field:'asset_cloud',               width:90 },
+        { title:'Data Disclosure',  field:'attribute_confidentiality_data_disclosure', width:130 },
+        { title:'Data Total',       field:'attribute_confidentiality_data_total',      width:110 },
+        { title:'Availability',     field:'attribute_availability_variety',  width:160 },
+        { title:'Integrity',        field:'attribute_integrity_variety',     width:160 },
+        { title:'Impact Rating',    field:'impact_overall_rating',     width:110 },
+        { title:'Impact Amount',    field:'impact_overall_amount',     width:120 },
+        { title:'Currency',         field:'impact_iso_currency_code',  width:90 },
+        { title:'Disc. Internal',   field:'discovery_method_internal_variety', width:150 },
+        { title:'Disc. External',   field:'discovery_method_external_variety', width:150 },
+        { title:'DBIR Year',        field:'plus_dbir_year',            width:90 },
+        { title:'Confidence',       field:'confidence',                width:100 },
+        { title:'Summary',          field:'summary',                   width:350 },
+        { title:'Reference',        field:'reference',                 width:280, formatter:'link', formatterParams:{ urlField:'reference', target:'_blank' } },
+        { title:'Incident ID',      field:'incident_id',               width:200 },
+      ];
+      table=new Tabulator('#veris-table',{ data, layout:'fitData', pagination:true, paginationSize:50, movableColumns:true, columnDefaults:{resizable:true,minWidth:60}, columns });
       table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); buildColumnPicker(); attachColumnPickerButtons(); });
       table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData())));
       table.on('columnResized',syncTopScrollWidth); table.on('columnMoved',syncTopScrollWidth); table.on('renderComplete',syncTopScrollWidth);

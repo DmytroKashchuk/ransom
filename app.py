@@ -803,11 +803,31 @@ def get_veris():
         path = os.path.join(app.root_path, 'data', 'veris.csv')
         if not os.path.exists(path):
             return jsonify({'error': f'File not found: {path}'}), 404
-        # Large, wide CSV; use low_memory False
+        selected_cols = [
+            'victim_victim_id', 'victim_industry', 'victim_country', 'victim_state',
+            'victim_employee_count', 'victim_region', 'victim_revenue_amount',
+            'security_incident', 'targeted', 'summary', 'confidence',
+            'timeline_incident_year', 'timeline_incident_month', 'timeline_incident_day',
+            'timeline_compromise_unit', 'timeline_compromise_value',
+            'timeline_discovery_unit', 'timeline_discovery_value',
+            'action_hacking_variety', 'action_hacking_vector',
+            'action_malware_variety', 'action_malware_name', 'action_malware_vector',
+            'action_social_variety', 'action_social_vector',
+            'action_error_variety',
+            'actor_external_variety', 'actor_external_motive', 'actor_external_country',
+            'actor_internal_variety', 'actor_internal_motive',
+            'asset_assets', 'asset_cloud',
+            'attribute_confidentiality_data_disclosure', 'attribute_confidentiality_data_total',
+            'attribute_availability_variety',
+            'attribute_integrity_variety',
+            'impact_overall_rating', 'impact_overall_amount', 'impact_iso_currency_code',
+            'discovery_method_internal_variety', 'discovery_method_external_variety',
+            'reference', 'incident_id', 'plus_dbir_year',
+        ]
         df = pd.read_csv(path, low_memory=False)
         df.columns = [c.strip().strip('\ufeff') for c in df.columns]
-        # Drop columns that are completely empty
-        df = df.drop(columns=[c for c in df.columns if df[c].isna().all()])
+        available = [c for c in selected_cols if c in df.columns]
+        df = df[available]
         df = df.replace({'': None})
         df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
         records = df.to_dict('records')
