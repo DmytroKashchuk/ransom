@@ -530,7 +530,23 @@ def get_ransomware_live():
         path = _ransomware_live_path()
         if not path:
             return jsonify({'error': 'ransomware_live CSV not found (looked for ransomware_live.csv / ranomware_live.csv)'}), 404
-        df = pd.read_csv(path)
+        # Tolerant parsing: the upstream victims.csv often contains unescaped quotes
+        # inside description fields, which breaks the default C parser with
+        # "EOF inside string". Fall back to the python engine and skip bad lines.
+        try:
+            df = pd.read_csv(path)
+        except Exception:
+            try:
+                df = pd.read_csv(path, engine='python', on_bad_lines='skip')
+            except Exception:
+                import csv as _csv
+                df = pd.read_csv(
+                    path,
+                    engine='python',
+                    on_bad_lines='skip',
+                    quoting=_csv.QUOTE_NONE,
+                    escapechar='\\',
+                )
         df.columns = [c.strip() for c in df.columns]
         # Replace empty strings with NaN then with None
         df = df.replace({'': None})
