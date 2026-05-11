@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block title %}Home – Ransomware Atlas{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="mb-4">
+    <h1 class="h3 mb-1">Datasets Overview</h1>
+    <p class="text-muted mb-0">Summary of the ransomware datasets available</p>
+  </div>
+
+  {% macro dataset_table(items) -%}
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th scope="col">Dataset</th>
+            <th scope="col">Source</th>
+            <th scope="col" class="text-end">Records</th>
+            <th scope="col">Last Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in items %}
+          <tr>
+            <td>
+              {% if d.exists %}
+                <a href="{{ d.page }}" class="fw-semibold text-decoration-none">{{ d.name }}</a>
+              {% else %}
+                <span class="fw-semibold text-muted">{{ d.name }}</span>
+                <span class="badge bg-warning text-dark ms-2">missing</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if d.source.startswith('http') %}
+                <a href="{{ d.source }}" target="_blank" rel="noopener" class="text-decoration-none">{{ d.source }}</a>
+              {% else %}
+                <span class="text-muted">{{ d.source }}</span>
+              {% endif %}
+            </td>
+            <td class="text-end font-monospace">
+              {% if d.records is not none %}{{ "{:,}".format(d.records) }}{% else %}—{% endif %}
+            </td>
+            <td class="text-muted">
+              {% if d.updated_at %}{{ d.updated_at[:19].replace('T', ' ') }}{% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {%- endmacro %}
+
+  <h2 class="h5 mt-4 mb-2">Ransomware Incidents</h2>
+  <p class="text-muted small mb-2">Public datasets of ransomware.</p>
+  {{ dataset_table(incidents) }}
+
+  <h2 class="h5 mt-4 mb-2">Ransomware enriched with SWDB</h2>
+  <p class="text-muted small mb-2">Ransomware victims joined with the Spiceworks Web Database (SWDB).</p>
+  {{ dataset_table(enriched) }}
+
+  <p class="text-muted small mt-3 mb-0">
+    See <a href="/intro">Intro</a> for a short description of each dataset.
+  </p>
+</div>
+{% endblock %}

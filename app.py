@@ -7,6 +7,181 @@ import pandas as pd
 import markdown
 
 app = Flask(__name__)
+
+
+# ------------------------- Dataset catalog (single source of truth) -------------------------
+# Used by /home (summary table) and /intro (descriptions).
+def _ds(name, source, path, page, description, group):
+    return {
+        'name': name,
+        'source': source,
+        'path': path,
+        'page': page,
+        'description': description,
+        'group': group,
+    }
+
+
+def _build_dataset_catalog():
+    return [
+        # ---- Ransomware Incidents ----
+        _ds('Ransomware.live Victims',
+            'https://www.ransomware.live',
+            None,  # resolved later via _ransomware_live_path()
+            '/ransomware_live',
+            'Live feed of victims claimed on ransomware leak sites. Continuously updated; '
+            'each record is one public claim by a ransomware group (group, victim, discovery/publish dates, country, activity).',
+            'incidents'),
+        _ds('Temple University Ransomware DB',
+            'https://sites.temple.edu/care/ci-rw-attacks/',
+            os.path.join('data', 'temple_db.csv'),
+            '/temple',
+            'Curated dataset of ransomware attacks against critical infrastructure with strain, sector, '
+            'duration, ransom amount and payment status fields.',
+            'incidents'),
+        _ds('Ransom Grained DB',
+            'Curated granular incident dataset',
+            os.path.join('data', 'ransom_grained_db.csv'),
+            '/ransom_grained',
+            'High-granularity ransomware incident records (100+ attributes) covering attack vector, '
+            'data exfiltration/destruction/exposure/sale, payment outcome and financial/operational impact.',
+            'incidents'),
+        _ds('Maryland Cyber Events',
+            'https://cissm.umd.edu/cyber-events-database',
+            os.path.join('data', 'maryland.csv'),
+            '/maryland',
+            'University of Maryland CISSM Cyber Events Database: open dataset of publicly reported '
+            'cyber incidents (event type, actor, motive, industry, country/state).',
+            'incidents'),
+        _ds('VERIS Community Database',
+            'https://verisframework.org/vcdb.html',
+            os.path.join('data', 'veris.csv'),
+            '/veris',
+            'VERIS Community Database (VCDB) — incidents coded with the Vocabulary for Event Recording '
+            'and Incident Sharing schema (actors, actions, assets, attributes, impact).',
+            'incidents'),
+        _ds('EuRepoC Cyber Incidents',
+            'https://eurepoc.eu',
+            os.path.join('data', 'eurepoc_data.csv'),
+            '/eurepoc',
+            'European Repository of Cyber Incidents — politically and economically motivated cyber '
+            'operations attributed in open sources.',
+            'incidents'),
+        _ds('SEC 8-K Filings',
+            'https://www.sec.gov/edgar',
+            os.path.join('data', '8k.csv'),
+            '/eightk',
+            'Cybersecurity-related SEC Form 8-K material event disclosures filed by US-listed companies '
+            '(Item 1.05 and related items).',
+            'incidents'),
+        _ds('SEC 10-K Master Records',
+            'https://www.sec.gov/edgar',
+            os.path.join('data', '10k', 'master_records.csv'),
+            '/master_records',
+            'Compiled records extracted from SEC Form 10-K annual reports — risk factors and disclosures '
+            'related to ransomware/cyber incidents.',
+            'incidents'),
+
+        # ---- Ransomware enriched with SWDB ----
+        _ds('Ransomed Domains × SWDB',
+            'Ransomware.live + Spiceworks SWDB',
+            os.path.join('data', 'ransomed_domains_in_swdb.csv'),
+            '/swdb',
+            'Ransomware-victim domains matched against the Spiceworks Web Database (SWDB), enriched with '
+            'site IDs and SWDB metadata for each compromised domain.',
+            'enriched'),
+        _ds('Unique Ransomed Domains × SWDB',
+            'Aggregated from ransomed_domains_in_swdb.csv',
+            os.path.join('data', 'domains_swdb_unique.csv'),
+            '/swdb_unique',
+            'Deduplicated view of ransomed domains found in SWDB (one row per unique domain) for cleaner aggregation.',
+            'enriched'),
+        _ds('Ransomed Domains × SWDB × Spiceworks Accounts',
+            'SWDB + Spiceworks account database',
+            os.path.join('data', 'ransomed_domains_in_swdb_with_accounts.csv'),
+            '/',
+            'SWDB-matched ransomware victims further enriched with Spiceworks account attributes '
+            '(employees, IT staff, revenue, ICT spending, country, SIC code).',
+            'enriched'),
+        _ds('Company Presence Matrix',
+            'Cross-database join across the ransomware sources',
+            os.path.join('data', 'company_presence_matrix.csv'),
+            '/company_presence_matrix',
+            'Binary presence matrix indicating, for each company, in which ransomware datasets it appears '
+            '(useful to evaluate cross-source coverage and overlap).',
+            'enriched'),
+        _ds('Final Raw Merged',
+            'Merged ransomware datasets',
+            os.path.join('data', 'final_raw_merged.csv'),
+            '/final_raw_merged',
+            'Raw row-level merge of the ransomware incident datasets before deduplication — preserves '
+            'per-source columns to inspect provenance.',
+            'enriched'),
+    ]
+
+
+DATASETS = _build_dataset_catalog()
+
+
+def _resolve_dataset_path(d):
+    """Resolve catalog entry path to an absolute path; handle the ransomware.live alternate filename."""
+    if d['name'] == 'Ransomware.live Victims':
+        return _ransomware_live_path()
+    p = d.get('path')
+    if not p:
+        return None
+    return p if os.path.isabs(p) else os.path.join(app.root_path, p)
+
+
+# ------------------------- Row count with mtime cache -------------------------
+_ROWCOUNT_CACHE = {}  # path -> (mtime, size, count)
+
+
+def _count_csv_records(path):
+    """Return the number of CSV records (data rows, excluding header).
+
+    Uses pandas with tolerant fallbacks so multi-line quoted fields and bad rows
+    don't inflate the count (which a naive line-count would do).
+    Cached by (mtime, size) so repeated calls are cheap.
+    """
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        st = os.stat(path)
+        key = path
+        cached = _ROWCOUNT_CACHE.get(key)
+        if cached and cached[0] == st.st_mtime and cached[1] == st.st_size:
+            return cached[2]
+    except Exception:
+        st = None
+
+    count = None
+    # Try the fast C parser first, then fall back to tolerant python parser.
+    for kwargs in (
+        {'low_memory': False},
+        {'engine': 'python', 'on_bad_lines': 'skip'},
+    ):
+        try:
+            # usecols=[0] keeps memory low — we only need the row count.
+            df = pd.read_csv(path, usecols=[0], **kwargs)
+            count = int(len(df))
+            break
+        except Exception:
+            continue
+
+    if count is None:
+        # Last resort: physical line count minus header (may overcount on multi-line fields).
+        try:
+            with open(path, 'r', encoding='utf-8', errors='replace', newline='') as f:
+                count = max(sum(1 for _ in f) - 1, 0)
+        except Exception:
+            return None
+
+    if st is not None:
+        _ROWCOUNT_CACHE[path] = (st.st_mtime, st.st_size, count)
+    return count
+
+
 # Intro page rendering README.md
 @app.route('/intro')
 def intro_page():
@@ -19,7 +194,15 @@ def intro_page():
             html_content = markdown.markdown(md_text, extensions=['extra', 'toc', 'tables', 'fenced_code'])
     except Exception as e:
         html_content = f"<p style='color:red;'>Failed to load README.md: {e}</p>"
-    return render_template('intro.html', readme_html=Markup(html_content))
+
+    incidents = [d for d in DATASETS if d['group'] == 'incidents']
+    enriched = [d for d in DATASETS if d['group'] == 'enriched']
+    return render_template(
+        'intro.html',
+        readme_html=Markup(html_content),
+        incidents=incidents,
+        enriched=enriched,
+    )
 
 # Path to the CSV file
 CSV_PATH = 'data/ransomed_domains_in_swdb_with_accounts.csv'
@@ -172,6 +355,24 @@ def _safe_datetime(val):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+# Simple home page: lightweight summary of available datasets
+@app.route('/home')
+def home_page():
+    def build(d):
+        path = _resolve_dataset_path(d)
+        exists = bool(path) and os.path.exists(path)
+        return {
+            **d,
+            'updated_at': _file_mtime_iso(path) if exists else None,
+            'records': _count_csv_records(path) if exists else None,
+            'exists': exists,
+        }
+
+    incidents = [build(d) for d in DATASETS if d['group'] == 'incidents']
+    enriched = [build(d) for d in DATASETS if d['group'] == 'enriched']
+    return render_template('home.html', incidents=incidents, enriched=enriched)
 
 
 def _ransomware_live_path():

@@ -24,6 +24,58 @@
   {% include 'navbar.html' %}
   <div class="container">
     <div class="readme">{{ readme_html|safe }}</div>
+
+    <hr />
+
+    <h2 id="datasets">Datasets</h2>
+    <p>Brief description of every dataset available in this dashboard. See the
+       <a href="/home">Home</a> page for record counts and last-updated timestamps.</p>
+
+    <h3>Ransomware Incidents</h3>
+    <p style="color:#475569; margin-top:-6px;">Public datasets of ransomware / cyber incidents — one row per claimed or reported event.</p>
+    <table>
+      <thead>
+        <tr><th style="width:24%;">Dataset</th><th style="width:22%;">Source</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        {% for d in incidents %}
+        <tr>
+          <td><a href="{{ d.page }}"><strong>{{ d.name }}</strong></a></td>
+          <td>
+            {% if d.source.startswith('http') %}
+              <a href="{{ d.source }}" target="_blank" rel="noopener">{{ d.source }}</a>
+            {% else %}
+              {{ d.source }}
+            {% endif %}
+          </td>
+          <td>{{ d.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h3>Ransomware enriched with SWDB</h3>
+    <p style="color:#475569; margin-top:-6px;">Ransomware victims joined with the Spiceworks Web Database (SWDB) and related cross-source merges.</p>
+    <table>
+      <thead>
+        <tr><th style="width:24%;">Dataset</th><th style="width:22%;">Source</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        {% for d in enriched %}
+        <tr>
+          <td><a href="{{ d.page }}"><strong>{{ d.name }}</strong></a></td>
+          <td>
+            {% if d.source.startswith('http') %}
+              <a href="{{ d.source }}" target="_blank" rel="noopener">{{ d.source }}</a>
+            {% else %}
+              {{ d.source }}
+            {% endif %}
+          </td>
+          <td>{{ d.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </body>
 </html>
