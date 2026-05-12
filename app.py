@@ -1209,11 +1209,29 @@ def _json_safe(v):
 
 
 def _load_csv_safe(path, selected_cols=None, rename_dots=False):
-    """Load a CSV, clean NaN/Inf, optionally select columns & rename dots."""
+    """Load a CSV, clean NaN/Inf, optionally select columns & rename dots.
+
+    Tolerates malformed CSVs (unterminated quotes, stray bad lines) by
+    falling back to the python engine and ultimately disabling quoting.
+    """
     if not os.path.exists(path):
         app.logger.warning(f"_load_csv_safe: file not found: {path}")
         return None
-    df = pd.read_csv(path, low_memory=False)
+    import csv as _csv
+    try:
+        df = pd.read_csv(path, low_memory=False)
+    except pd.errors.ParserError as e:
+        app.logger.warning(f"_load_csv_safe: C parser failed for {path} ({e}); retrying with python engine")
+        try:
+            df = pd.read_csv(path, engine='python', on_bad_lines='skip')
+        except Exception as e2:
+            app.logger.warning(f"_load_csv_safe: python engine failed for {path} ({e2}); retrying with QUOTE_NONE")
+            df = pd.read_csv(
+                path,
+                engine='python',
+                on_bad_lines='skip',
+                quoting=_csv.QUOTE_NONE,
+            )
     df.columns = [c.strip().strip('\ufeff') for c in df.columns]
     # Drop completely empty columns
     df = df.drop(columns=[c for c in df.columns if df[c].isna().all()], errors='ignore')
