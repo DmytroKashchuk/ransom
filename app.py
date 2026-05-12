@@ -1164,9 +1164,54 @@ def all_databases_page():
 
 
 # ================= Detailed Databases (6-table drill-down) =================
+def _json_safe(v):
+    """Convert any value into a JSON-serializable form (None for NaN/NaT/Inf)."""
+    # None / pandas NA
+    if v is None:
+        return None
+    try:
+        if v is pd.NA:
+            return None
+    except Exception:
+        pass
+    # pandas NaT
+    try:
+        if isinstance(v, type(pd.NaT)) or (hasattr(pd, 'isna') and pd.isna(v) and not isinstance(v, (list, dict, tuple))):
+            return None
+    except Exception:
+        pass
+    # numpy scalar
+    if isinstance(v, np.generic):
+        try:
+            v = v.item()
+        except Exception:
+            return str(v)
+    # floats
+    if isinstance(v, float):
+        if math.isnan(v) or math.isinf(v):
+            return None
+        return v
+    # datetime / Timestamp
+    if isinstance(v, (pd.Timestamp, datetime)):
+        try:
+            return v.isoformat()
+        except Exception:
+            return str(v)
+    # primitives
+    if isinstance(v, (str, int, bool)):
+        return v
+    # fallback
+    try:
+        json.dumps(v)
+        return v
+    except Exception:
+        return str(v)
+
+
 def _load_csv_safe(path, selected_cols=None, rename_dots=False):
     """Load a CSV, clean NaN/Inf, optionally select columns & rename dots."""
     if not os.path.exists(path):
+        app.logger.warning(f"_load_csv_safe: file not found: {path}")
         return None
     df = pd.read_csv(path, low_memory=False)
     df.columns = [c.strip().strip('\ufeff') for c in df.columns]
@@ -1177,85 +1222,96 @@ def _load_csv_safe(path, selected_cols=None, rename_dots=False):
         df = df[available]
     if rename_dots:
         df.columns = [c.replace('.', '_').replace('-', '_') for c in df.columns]
-    df = df.replace({'': None})
-    df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
     records = df.to_dict('records')
+    cleaned = []
     for r in records:
-        for k, v in list(r.items()):
-            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-                r[k] = None
-    return records
+        cleaned.append({k: _json_safe(v) for k, v in r.items()})
+    return cleaned
 
 
 @app.route('/api/detailed_databases')
 def get_detailed_databases():
     """Return all 6 ransomware databases with selected columns for the detailed overview page."""
-    try:
-        result = {}
+    import traceback
+    result = {}
+    errors = {}
 
+    def _safe(name, loader):
+        try:
+            data = loader()
+            result[name] = data or []
+        except Exception as ex:
+            app.logger.error(f"detailed_databases[{name}] failed: {ex}\n{traceback.format_exc()}")
+            errors[name] = str(ex)
+            result[name] = []
+
+    try:
         # 1. Temple DB
-        temple_path = os.path.join(app.root_path, 'data', 'temple_db.csv')
-        result['temple'] = _load_csv_safe(temple_path, selected_cols=[
-            'id', 'date_began', 'year', 'org_name', 'location',
-            'primary_ci_sector', 'secondary_ci_sector', 'strain_group',
-            'mitre_attack_id', 'duration', 'duration_rank',
-            'ransom_amount', 'local_currency', 'ransom_scale',
-            'paid_status', 'pay_method', 'amount_paid', 'source', 'comments'
-        ]) or []
+        _safe('temple', lambda: _load_csv_safe(
+            os.path.join(app.root_path, 'data', 'temple_db.csv'),
+            selected_cols=[
+                'id', 'date_began', 'year', 'org_name', 'location',
+                'primary_ci_sector', 'secondary_ci_sector', 'strain_group',
+                'mitre_attack_id', 'duration', 'duration_rank',
+                'ransom_amount', 'local_currency', 'ransom_scale',
+                'paid_status', 'pay_method', 'amount_paid', 'source', 'comments'
+            ]))
 
         # 2. Ransomware Live
         rl_path = _ransomware_live_path()
-        result['ransomware_live'] = _load_csv_safe(rl_path, selected_cols=[
+        _safe('ransomware_live', lambda: _load_csv_safe(rl_path, selected_cols=[
             'post_title', 'group_name', 'discovered', 'description',
             'published', 'post_url', 'country', 'activity', 'website'
-        ]) if rl_path else []
+        ]) if rl_path else [])
 
-        # 3. Grained DB (select key columns from 100+)
-        grained_path = os.path.join(app.root_path, 'data', 'ransom_grained_db.csv')
-        result['grained'] = _load_csv_safe(grained_path, selected_cols=[
-            'victim', 'sector', 'attacker', 'incident-date',
-            'sources', 'payment-outcome',
-            'data-destruction', 'data-exfiltration', 'data-exposure', 'data-sale',
-            'attack-vector.ransomware-variant',
-            'attacker-action.ransom-amount-usd',
-            'impact.loss-amount-usd',
-            'impact.category.Operational Impact',
-            'impact.category.Financial Loss',
-        ], rename_dots=True) or []
+        # 3. Grained DB
+        _safe('grained', lambda: _load_csv_safe(
+            os.path.join(app.root_path, 'data', 'ransom_grained_db.csv'),
+            selected_cols=[
+                'victim', 'sector', 'attacker', 'incident-date',
+                'sources', 'payment-outcome',
+                'data-destruction', 'data-exfiltration', 'data-exposure', 'data-sale',
+                'attack-vector.ransomware-variant',
+                'attacker-action.ransom-amount-usd',
+                'impact.loss-amount-usd',
+                'impact.category.Operational Impact',
+                'impact.category.Financial Loss',
+            ], rename_dots=True))
 
         # 4. Maryland
-        maryland_path = os.path.join(app.root_path, 'data', 'maryland.csv')
-        result['maryland'] = _load_csv_safe(maryland_path, selected_cols=[
-            'event_date', 'reported_date', 'year', 'month',
-            'actor', 'actor_type', 'organization', 'industry',
-            'motive', 'event_type', 'event_subtype',
-            'magnitude', 'duration', 'description', 'source_url',
-            'country', 'state', 'county'
-        ]) or []
+        _safe('maryland', lambda: _load_csv_safe(
+            os.path.join(app.root_path, 'data', 'maryland.csv'),
+            selected_cols=[
+                'event_date', 'reported_date', 'year', 'month',
+                'actor', 'actor_type', 'organization', 'industry',
+                'motive', 'event_type', 'event_subtype',
+                'magnitude', 'duration', 'description', 'source_url',
+                'country', 'state', 'county'
+            ]))
 
         # 5. 10-K Master Records
-        tenk_path = os.path.join(app.root_path, 'data', '10k', 'master_records.csv')
-        result['tenk'] = _load_csv_safe(tenk_path) or []
+        _safe('tenk', lambda: _load_csv_safe(
+            os.path.join(app.root_path, 'data', '10k', 'master_records.csv')))
 
         # 6. 8-K Filings
-        eightk_path = os.path.join(app.root_path, 'data', '8k.csv')
-        result['eightk'] = _load_csv_safe(eightk_path) or []
+        _safe('eightk', lambda: _load_csv_safe(
+            os.path.join(app.root_path, 'data', '8k.csv')))
 
         # 7. VERIS
-        veris_path = os.path.join(app.root_path, 'data', 'veris.csv')
-        result['veris'] = _load_csv_safe(veris_path, selected_cols=[
-            'victim_victim_id', 'victim_industry', 'victim_country',
-            'victim_state', 'victim_employee_count',
-            'security_incident', 'summary',
-            'timeline_incident_year', 'timeline_incident_month',
-            'action_malware_variety', 'action_malware_name',
-            'action_hacking_variety', 'action_social_variety',
-            'actor_external_variety', 'actor_external_motive',
-            'attribute_confidentiality_data_disclosure',
-            'impact_overall_rating', 'reference',
-        ]) or []
+        _safe('veris', lambda: _load_csv_safe(
+            os.path.join(app.root_path, 'data', 'veris.csv'),
+            selected_cols=[
+                'victim_victim_id', 'victim_industry', 'victim_country',
+                'victim_state', 'victim_employee_count',
+                'security_incident', 'summary',
+                'timeline_incident_year', 'timeline_incident_month',
+                'action_malware_variety', 'action_malware_name',
+                'action_hacking_variety', 'action_social_variety',
+                'actor_external_variety', 'actor_external_motive',
+                'attribute_confidentiality_data_disclosure',
+                'impact_overall_rating', 'reference',
+            ]))
 
-        # Include row counts for display
         result['_meta'] = {
             'temple_total': len(result['temple']),
             'ransomware_live_total': len(result['ransomware_live']),
@@ -1264,13 +1320,15 @@ def get_detailed_databases():
             'tenk_total': len(result['tenk']),
             'eightk_total': len(result['eightk']),
             'veris_total': len(result['veris']),
+            'errors': errors,
         }
 
         return app.response_class(
-            json.dumps(result, allow_nan=False),
+            json.dumps(result, allow_nan=False, default=str),
             mimetype='application/json'
         )
     except Exception as e:
+        app.logger.error(f"detailed_databases fatal: {e}\n{traceback.format_exc()}")
         return jsonify({'error': f'Failed to load detailed databases: {e}'}), 500
 
 
