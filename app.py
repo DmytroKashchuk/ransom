@@ -1,7 +1,7 @@
 from flask import Flask, render_template, jsonify, request
 from markupsafe import Markup
 from datetime import datetime
-import os, json, math, subprocess, ast, re
+import os, json, math, subprocess, ast, re, urllib.request, tempfile, shutil
 import numpy as np
 import pandas as pd
 import markdown
@@ -824,16 +824,32 @@ def ransomware_live_last_updated():
 
 @app.route('/api/ransomware_live/refresh', methods=['POST'])
 def refresh_ransomware_live():
-    dest_path = os.path.join(app.root_path, 'data', 'ranomware_live.csv')
-    cmd = ['curl', '-L', RANSOMWARE_LIVE_URL, '-o', dest_path]
+    # Write to the same file the page reads from. If neither exists yet,
+    # default to the canonical (non-typo) name.
+    dest_path = _ransomware_live_path() or os.path.join(app.root_path, 'data', 'ransomware_live.csv')
+    data_dir = os.path.dirname(dest_path)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        os.makedirs(data_dir, exist_ok=True)
     except Exception as e:
-        return jsonify({'error': f'Failed to execute curl: {e}'}), 500
+        return jsonify({'error': f'Cannot create data directory {data_dir}: {e}'}), 500
 
-    if result.returncode != 0:
-        stderr = (result.stderr or '').strip()
-        return jsonify({'error': f'curl failed with code {result.returncode}', 'stderr': stderr}), 500
+    # Download with stdlib (no dependency on the `curl` binary being present on the server).
+    tmp_fd, tmp_path = tempfile.mkstemp(prefix='rwlive_', suffix='.csv', dir=data_dir)
+    os.close(tmp_fd)
+    try:
+        req = urllib.request.Request(RANSOMWARE_LIVE_URL, headers={'User-Agent': 'ransom-webapp/1.0'})
+        with urllib.request.urlopen(req, timeout=120) as resp, open(tmp_path, 'wb') as out:
+            shutil.copyfileobj(resp, out)
+        if os.path.getsize(tmp_path) == 0:
+            raise RuntimeError('downloaded file is empty')
+        os.replace(tmp_path, dest_path)
+    except Exception as e:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+        return jsonify({'error': f'Download failed: {e}', 'url': RANSOMWARE_LIVE_URL, 'dest': dest_path}), 500
 
     if not os.path.exists(dest_path):
         return jsonify({'error': 'Download reported success but file is missing'}), 500
