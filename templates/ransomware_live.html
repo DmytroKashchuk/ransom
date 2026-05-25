@@ -9,137 +9,29 @@
   <link href="/static/css/main.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      margin: 0;
-      background: #1e293b;
-    }
-
-    .container {
-      max-width: 100%;
-      padding: 18px 20px 60px;
-    }
-
-    .panel {
-      background: #fff;
-      border-radius: 16px;
-      padding: 20px 24px 30px;
-      box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.25);
-    }
-
-    .filters {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-
-    .filter-input {
-      padding: 10px 12px;
-      border: 1px solid #d1d5db;
-      border-radius: 8px;
-      min-width: 200px;
-      font-size: 14px;
-    }
-
-    .btn {
-      padding: 10px 14px;
-      border: 1px solid #6366f1;
-      background: #6366f1;
-      color: #fff;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-
-    .btn-alt {
-      background: #64748b;
-      border-color: #64748b;
-    }
-
-    .stats {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      margin: 4px 0 18px;
-    }
-
-    .stat {
-      background: #f1f5f9;
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-size: 13px;
-      line-height: 1.3;
-      min-width: 150px;
-    }
-
-    .top-scroll {
-      overflow-x: auto;
-      overflow-y: hidden;
-      height: 14px;
-      margin: 8px 0 10px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-    }
-
-    .top-scroll::-webkit-scrollbar {
-      height: 10px;
-    }
-
-    .top-scroll::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 6px;
-    }
-
-    .top-scroll::-webkit-scrollbar-track {
-      background: #f1f5f9;
-    }
-
-    .update-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 8px 0 12px;
-      flex-wrap: wrap;
-    }
-
-    .update-note {
-      color: #475569;
-      font-size: 13px;
-    }
-
-    .chart-card {
-      margin: 8px 0 16px;
-      padding: 14px 16px;
-      border: 1px solid #e2e8f0;
-      border-radius: 14px;
-      background: #f8fafc;
-    }
-
-    .chart-header {
-      font-weight: 600;
-      font-size: 15px;
-      margin-bottom: 8px;
-      color: #0f172a;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .chart-body {
-      position: relative;
-      height: 320px;
-    }
-
-    #rw-year-chart-placeholder {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #94a3b8;
-      font-size: 14px;
-    }
+    body { margin: 0; background: #1e293b; }
+    .container { max-width: 100%; padding: 18px 20px 60px; }
+    .panel { background: #fff; border-radius: 16px; padding: 20px 24px 30px; box-shadow: 0 12px 32px -8px rgba(0,0,0,0.25); }
+    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+    .filter-input { padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; min-width: 200px; font-size: 14px; }
+    .btn { padding: 10px 14px; border: 1px solid #6366f1; background: #6366f1; color: #fff; border-radius: 8px; cursor: pointer; }
+    .btn-alt { background: #64748b; border-color: #64748b; }
+    .stats { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0 18px; }
+    .stat { background: #f1f5f9; padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.3; min-width: 150px; }
+    .top-scroll { overflow-x: auto; overflow-y: hidden; height: 14px; margin: 8px 0 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; }
+    .top-scroll::-webkit-scrollbar { height: 10px; }
+    .top-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
+    .update-row { display: flex; align-items: center; gap: 12px; margin: 8px 0 12px; flex-wrap: wrap; }
+    .update-note { color: #475569; font-size: 13px; }
+    .chart-card { margin: 8px 0 16px; padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; }
+    .chart-header { font-weight: 600; font-size: 15px; margin-bottom: 8px; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .chart-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-weight: 400; font-size: 13px; color: #475569; }
+    .chart-controls input[type=number], .chart-controls select { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+    .chart-controls input[type=number] { width: 80px; }
+    .chart-body { position: relative; height: 460px; }
+    .chart-body.tall { height: 620px; }
+    .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
   </style>
 </head>
 
@@ -152,31 +44,44 @@
         <button id="btn-update" class="btn" type="button">Update</button>
         <span class="update-note">Last update: <strong id="last-update">-</strong></span>
       </div>
+
+      <!-- CHART 1: Group ranking per year (bump plot, from 2020) -->
       <div class="chart-card">
         <div class="chart-header">
-          <span>Ransom attacks over the years (all vs. municipalities)</span>
-          <select id="chart-mode" class="filter-input" style="min-width: 180px; padding:8px 10px;">
-            <option value="both" selected>Show both</option>
-            <option value="muni_only">Only municipalities</option>
-            <option value="total_only">Only total</option>
-            <option value="muni_vs_others">Municipalities vs others</option>
-            <option value="muni_vs_total">Municipalities vs total</option>
-          </select>
+          <span>Group ranking by year (bump plot, from 2020)</span>
+          <div class="chart-controls">
+            <label>Top positions per year: <input id="rank-positions-n" type="number" min="1" max="50" value="10"></label>
+            <button id="rank-apply" class="btn" type="button" style="padding:6px 12px;">Apply</button>
+          </div>
         </div>
-        <div class="chart-body">
-          <canvas id="rw-year-chart" aria-label="Ransom attacks per year" role="img"></canvas>
-          <div id="rw-year-chart-placeholder">No year data available</div>
+        <div class="chart-body tall">
+          <canvas id="chart-rank"></canvas>
         </div>
       </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <span>Attacks by sector (Government vs Healthcare vs Others)</span>
+
+      <!-- CHART 2 + 3: Top 20 by year (left) and total victims per year (right) -->
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-header">
+            <span>Top 20 groups by year</span>
+            <div class="chart-controls">
+              <label>Year: <select id="year-select"></select></label>
+            </div>
+          </div>
+          <div class="chart-body tall">
+            <canvas id="chart-year"></canvas>
+          </div>
         </div>
-        <div class="chart-body">
-          <canvas id="rw-sector-chart" aria-label="Ransom attacks by sector per year" role="img"></canvas>
-          <div id="rw-sector-chart-placeholder">No activity/year data available</div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <span>Total victims per year (from 2020)</span>
+          </div>
+          <div class="chart-body tall">
+            <canvas id="chart-totals"></canvas>
+          </div>
         </div>
       </div>
+
       <div class="stats" id="stats-bar">
         <div class="stat">Posts<br><strong id="stat-posts">0</strong></div>
         <div class="stat">Groups<br><strong id="stat-groups">0</strong></div>
@@ -184,6 +89,7 @@
         <div class="stat">Activities<br><strong id="stat-activities">0</strong></div>
         <div class="stat">Date Range<br><strong id="stat-range">-</strong></div>
       </div>
+
       <div class="filters">
         <input id="flt-title" class="filter-input" placeholder="Post title" />
         <input id="flt-group" class="filter-input" placeholder="Group" />
@@ -195,152 +101,353 @@
         <button id="btn-reset" class="btn-alt btn" type="button">Reset</button>
         <button id="btn-export" class="btn" type="button">Download CSV</button>
       </div>
-      <div id="top-scroll" class="top-scroll" style="display:none;">
-        <div id="top-scroll-spacer"></div>
-      </div>
+      <div id="top-scroll" class="top-scroll" style="display:none;"><div id="top-scroll-spacer"></div></div>
       <div id="rw-table"></div>
     </div>
   </div>
+
   <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
   <script>
-    let table; let fullData = []; let rwYearChart=null; let sectorChart=null; let chartCounts={all:{}, muni:{}}; let sectorCounts={}; let chartMode='both';
-    const muniKeywords=["city","county","town","muni","municipal","school","district",".gov","library","libraries","police","fire","sheriff"];
-    const sectorPalette={ gov:{bg:'rgba(37,99,235,0.55)', border:'#2563eb'}, health:{bg:'rgba(34,197,94,0.55)', border:'#22c55e'}, other:{bg:'rgba(148,163,184,0.55)', border:'#94a3b8'} };
-    function getYear(val){
-      if(val===null||val===undefined) return null;
-      if(typeof val==='number' && val>1900 && val<2100) return Math.floor(val);
-      if(typeof val==='string'){
-        const m=val.match(/(19|20)\d{2}/);
-        if(m){ const y=parseInt(m[0],10); if(y>1900 && y<2100) return y; }
+    let table = null;
+    let fullData = [];
+    let rankChart = null;
+    let yearChart = null;
+    let totalsChart = null;
+    const MIN_YEAR = 2020;
+
+    function getYear(val) {
+      if (val === null || val === undefined) return null;
+      if (typeof val === 'number' && val > 1900 && val < 2100) return Math.floor(val);
+      if (typeof val === 'string') {
+        const m = val.match(/(19|20)\d{2}/);
+        if (m) { const y = parseInt(m[0], 10); if (y > 1900 && y < 2100) return y; }
       }
       return null;
     }
-    function isMunicipal(row){
-      const text=((row.post_title||'')+' '+(row.description||'')).toLowerCase();
-      return muniKeywords.some(k=>text.includes(k));
+    function parseDate(val) { if (!val) return null; const d = new Date(val); return isNaN(d) ? null : d; }
+    function rowDateField(r) { return r.discovered || r.published || r.post_date || r.date; }
+    function colorFor(i, n) { return `hsl(${Math.round((i * 360) / Math.max(n, 1))}, 65%, 48%)`; }
+
+    function setLastUpdate(val) {
+      const el = document.getElementById('last-update'); if (!el) return;
+      if (!val) { el.textContent = '-'; return; }
+      const d = new Date(val);
+      el.textContent = !isNaN(d) ? d.toISOString().replace('T', ' ').replace('Z', ' UTC') : val;
     }
-    function activityCategory(row){
-      const act=(row.activity||'').toLowerCase();
-      if(act.includes('gov')) return 'Government';
-      if(act.includes('health')) return 'Healthcare';
-      return 'Others';
-    }
-    function updateYearChart(allCounts, muniCounts){
-      const canvas=document.getElementById('rw-year-chart');
-      const placeholder=document.getElementById('rw-year-chart-placeholder');
-      if(!canvas||!placeholder) return;
-      const years=Array.from(new Set([...Object.keys(allCounts), ...Object.keys(muniCounts)])).map(y=>parseInt(y,10)).filter(Number.isInteger).sort((a,b)=>a-b);
-      const lastYears = years.slice(-6);
-      const labels=lastYears.map(String);
-      // const labels=years.map(String);
-      const dataAll=labels.map(y=>allCounts[y]||0);
-      const dataMuni=labels.map(y=>muniCounts[y]||0);
-      const dataOthers=labels.map((_,i)=>Math.max(0, dataAll[i]-dataMuni[i]));
-      placeholder.style.display = labels.length ? 'none' : 'flex';
-      const palette={ total:{bg:'rgba(99,102,241,0.55)', border:'#6366f1'}, muni:{bg:'rgba(14,165,233,0.55)', border:'#0ea5e9'}, other:{bg:'rgba(249,115,22,0.55)', border:'#f97316'} };
-      let datasets;
-      switch(chartMode){
-        case 'muni_only':
-          datasets=[{label:'Municipality-related', data:dataMuni, backgroundColor:palette.muni.bg, borderColor:palette.muni.border, borderWidth:1.5, borderRadius:6}];
-          break;
-        case 'total_only':
-          datasets=[{label:'All attacks', data:dataAll, backgroundColor:palette.total.bg, borderColor:palette.total.border, borderWidth:1.5, borderRadius:6}];
-          break;
-        case 'muni_vs_others':
-          datasets=[
-            {label:'Municipality-related', data:dataMuni, backgroundColor:palette.muni.bg, borderColor:palette.muni.border, borderWidth:1.5, borderRadius:6},
-            {label:'Others', data:dataOthers, backgroundColor:palette.other.bg, borderColor:palette.other.border, borderWidth:1.5, borderRadius:6}
-          ];
-          break;
-        case 'muni_vs_total':
-          datasets=[
-            {label:'Municipality-related', data:dataMuni, backgroundColor:palette.muni.bg, borderColor:palette.muni.border, borderWidth:1.5, borderRadius:6},
-            {label:'All attacks', data:dataAll, backgroundColor:palette.total.bg, borderColor:palette.total.border, borderWidth:1.5, borderRadius:6}
-          ];
-          break;
-        case 'both':
-        default:
-          datasets=[
-            {label:'All attacks', data:dataAll, backgroundColor:palette.total.bg, borderColor:palette.total.border, borderWidth:1.5, borderRadius:6},
-            {label:'Municipality-related', data:dataMuni, backgroundColor:palette.muni.bg, borderColor:palette.muni.border, borderWidth:1.5, borderRadius:6}
-          ];
-          break;
-      }
-      if(!rwYearChart){
-        rwYearChart=new Chart(canvas,{type:'bar', data:{labels,datasets}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true, ticks:{precision:0}}}}});
-      } else {
-        rwYearChart.data.labels=labels;
-        rwYearChart.data.datasets=datasets;
-        rwYearChart.update();
-      }
+    async function fetchLastUpdate() {
+      try { const res = await fetch('/api/ransomware_live/last_updated'); const data = await res.json(); setLastUpdate(res.ok ? data.updated_at : null); }
+      catch (e) { setLastUpdate(null); }
     }
 
-    function updateSectorChart(counts){
-      const canvas=document.getElementById('rw-sector-chart');
-      const placeholder=document.getElementById('rw-sector-chart-placeholder');
-      if(!canvas||!placeholder) return;
-      const years=Object.keys(counts).map(y=>parseInt(y,10)).filter(Number.isInteger).sort((a,b)=>a-b);
-      const lastYears=years.slice(-6);
-      const labels=lastYears.map(String);
-      const dataGov=labels.map(y=> (counts[y]?.Government)||0);
-      const dataHealth=labels.map(y=> (counts[y]?.Healthcare)||0);
-      const dataOther=labels.map(y=> (counts[y]?.Others)||0);
-      placeholder.style.display = labels.length ? 'none':'flex';
-      const datasets=[
-        {label:'Government', data:dataGov, backgroundColor:sectorPalette.gov.bg, borderColor:sectorPalette.gov.border, borderWidth:1.5, borderRadius:6},
-        {label:'Healthcare', data:dataHealth, backgroundColor:sectorPalette.health.bg, borderColor:sectorPalette.health.border, borderWidth:1.5, borderRadius:6},
-        {label:'Others', data:dataOther, backgroundColor:sectorPalette.other.bg, borderColor:sectorPalette.other.border, borderWidth:1.5, borderRadius:6}
-      ];
-      if(!sectorChart){
-        sectorChart=new Chart(canvas,{type:'bar', data:{labels,datasets}, options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true, ticks:{precision:0}}}}});
-      } else {
-        sectorChart.data.labels=labels;
-        sectorChart.data.datasets=datasets;
-        sectorChart.update();
-      }
-    }
-    function setLastUpdate(val){ const el=document.getElementById('last-update'); if(!el) return; if(!val){ el.textContent='-'; return; } const d=new Date(val); if(!isNaN(d)){ const iso=d.toISOString(); el.textContent=iso.replace('T',' ').replace('Z',' UTC'); } else { el.textContent=val; } }
-    async function fetchLastUpdate(){ try{ const res=await fetch('/api/ransomware_live/last_updated'); const data=await res.json(); if(res.ok){ setLastUpdate(data.updated_at); } else { setLastUpdate(null); } }catch(e){ setLastUpdate(null); }}
-    function syncTopScrollWidth() { const spacer = document.getElementById('top-scroll-spacer'); const el = document.querySelector('#rw-table .tabulator-table'); if (spacer && el) spacer.style.width = el.scrollWidth + 'px'; }
-    function setupTopScroll() { const top = document.getElementById('top-scroll'); const holder = document.querySelector('#rw-table .tabulator-tableholder'); if (!top || !holder) return; top.addEventListener('scroll', () => holder.scrollLeft = top.scrollLeft); holder.addEventListener('scroll', () => top.scrollLeft = holder.scrollLeft); syncTopScrollWidth(); top.style.display = 'block'; if (window.ResizeObserver) { const el = document.querySelector('#rw-table .tabulator-table'); if (el) new ResizeObserver(syncTopScrollWidth).observe(el); } window.addEventListener('resize', syncTopScrollWidth); }
-    function parseDate(val) { if (!val) return null; const d = new Date(val); return isNaN(d) ? null : d; }
     function updateStats(data) {
       document.getElementById('stat-posts').textContent = data.length;
       document.getElementById('stat-groups').textContent = new Set(data.map(r => r.group_name).filter(Boolean)).size;
       document.getElementById('stat-countries').textContent = new Set(data.map(r => r.country).filter(Boolean)).size;
       document.getElementById('stat-activities').textContent = new Set(data.map(r => r.activity).filter(Boolean)).size;
-      if (data.length) {
-        const dates = data.map(r => parseDate(r.discovered)).filter(Boolean).sort((a, b) => a - b);
-        if (dates.length) {
-          const fmt = d => d.toISOString().split('T')[0];
-          document.getElementById('stat-range').textContent = fmt(dates[0]) + ' → ' + fmt(dates[dates.length - 1]);
-        } else document.getElementById('stat-range').textContent = '-';
-      } else document.getElementById('stat-range').textContent = '-';
-
-      const allCounts = {};
-      const muniCounts = {};
-      const sectorYearCounts = {};
-      data.forEach(r => {
-        const year = getYear(r.discovered || r.published || r.post_date || r.date);
-        if (!year) return;
-        allCounts[year] = (allCounts[year] || 0) + 1;
-        if (isMunicipal(r)) muniCounts[year] = (muniCounts[year] || 0) + 1;
-        const cat = activityCategory(r);
-        sectorYearCounts[year] = sectorYearCounts[year] || {Government:0, Healthcare:0, Others:0};
-        sectorYearCounts[year][cat] = (sectorYearCounts[year][cat] || 0) + 1;
-      });
-      chartCounts = {all: allCounts, muni: muniCounts};
-      updateYearChart(allCounts, muniCounts);
-      sectorCounts = sectorYearCounts;
-      updateSectorChart(sectorYearCounts);
+      const dates = data.map(r => parseDate(r.discovered)).filter(Boolean).sort((a, b) => a - b);
+      document.getElementById('stat-range').textContent = dates.length
+        ? dates[0].toISOString().split('T')[0] + ' → ' + dates[dates.length - 1].toISOString().split('T')[0]
+        : '-';
     }
-    function buildTable(data) { table = new Tabulator('#rw-table', { data, layout: 'fitData', pagination: true, paginationSize: 300, movableColumns: true, initialSort: [{ column: 'discovered', dir: 'desc' }], columnDefaults: { resizable: true, minWidth: 140 }, columns: [{ title: 'Post Title', field: 'post_title', width: 260 }, { title: 'Group', field: 'group_name', width: 140 }, { title: 'Discovered', field: 'discovered', width: 180 }, { title: 'Description', field: 'description', width: 320 }, { title: 'Published', field: 'published', width: 180 }, { title: 'Post URL', field: 'post_url', width: 300, formatter: (cell) => { const v = cell.getValue(); if (!v) return '-'; return `<a href="${v}" target="_blank" style="color:#6366f1;">link</a>`; } }, { title: 'Country', field: 'country', width: 120 }, { title: 'Activity', field: 'activity', width: 140 }, { title: 'Website', field: 'website', width: 220, formatter: (cell) => { const v = cell.getValue(); if (!v) return '-'; return `<a href="https://${v}" target="_blank" style="color:#6366f1;">${v}</a>`; } }, { title: 'Duplicates', field: 'duplicates', width: 140 },], }); table.on('tableBuilt', () => { setupTopScroll(); updateStats(table.getData()); }); table.on('dataFiltered', (_, rows) => updateStats(rows.map(r => r.getData()))); table.on('columnResized', syncTopScrollWidth); table.on('columnMoved', syncTopScrollWidth); table.on('renderComplete', syncTopScrollWidth); }
-    function applyFilters() { const title = document.getElementById('flt-title').value.trim().toLowerCase(); const group = document.getElementById('flt-group').value.trim().toLowerCase(); const country = document.getElementById('flt-country').value.trim().toLowerCase(); const activity = document.getElementById('flt-activity').value.trim().toLowerCase(); const website = document.getElementById('flt-website').value.trim().toLowerCase(); const fromVal = document.getElementById('flt-date-from').value; const toVal = document.getElementById('flt-date-to').value; const fromDate = fromVal ? new Date(fromVal) : null; const toDate = toVal ? new Date(toVal) : null; if (toDate) toDate.setHours(23, 59, 59, 999); table.setFilter((row) => { const d = row.discovered; const dDate = parseDate(d); if (title && !(String(row.post_title || '').toLowerCase().includes(title))) return false; if (group && !(String(row.group_name || '').toLowerCase().includes(group))) return false; if (country && !(String(row.country || '').toLowerCase().includes(country))) return false; if (activity && !(String(row.activity || '').toLowerCase().includes(activity))) return false; if (website && !(String(row.website || '').toLowerCase().includes(website))) return false; if (fromDate && (!dDate || dDate < fromDate)) return false; if (toDate && (!dDate || dDate > toDate)) return false; return true; }); }
-    function attachFilterHandlers() { ['flt-title', 'flt-group', 'flt-country', 'flt-activity', 'flt-website', 'flt-date-from', 'flt-date-to'].forEach(id => { document.getElementById(id).addEventListener('input', applyFilters); if (id.startsWith('flt-date')) document.getElementById(id).addEventListener('change', applyFilters); }); document.getElementById('btn-reset').addEventListener('click', () => { ['flt-title', 'flt-group', 'flt-country', 'flt-activity', 'flt-website', 'flt-date-from', 'flt-date-to'].forEach(id => document.getElementById(id).value = ''); table.clearFilter(); updateStats(table.getData()); }); document.getElementById('btn-export').addEventListener('click', () => { const visibleCols = table.getColumns().filter(c => c.isVisible && c.isVisible()).map(c => c.getField()).filter(Boolean); table.download('csv', 'ransomware_live_filtered.csv', { columns: visibleCols, rowRange: 'active' }); }); }
-    function attachUpdateHandler(){ const btn=document.getElementById('btn-update'); if(!btn) return; btn.addEventListener('click', async()=>{ btn.disabled=true; const original=btn.textContent; btn.textContent='Updating...'; try{ const res=await fetch('/api/ransomware_live/refresh',{method:'POST'}); const payload=await res.json(); if(!res.ok){ alert(payload.error || 'Update failed'); return; } await loadData(); setLastUpdate(payload.updated_at || payload.updated_at_human); }catch(err){ alert('Update failed: '+err); } finally{ btn.disabled=false; btn.textContent=original; } }); }
-    function attachChartModeHandler(){ const sel=document.getElementById('chart-mode'); if(!sel) return; sel.addEventListener('change',()=>{ chartMode=sel.value; updateYearChart(chartCounts.all||{}, chartCounts.muni||{}); }); }
-    async function loadData(){ const res=await fetch('/api/ransomware_live'); const data=await res.json(); if(data.error){ const container=document.getElementById('rw-table'); container.innerHTML='<div style="color:#dc2626; padding:18px;">'+data.error+'</div>'; return; } fullData=data; if(!table){ buildTable(data); attachFilterHandlers(); attachUpdateHandler(); attachChartModeHandler(); } else { table.replaceData(data); updateStats(table.getData()); } }
-    async function init(){ await loadData(); await fetchLastUpdate(); attachChartModeHandler(); }
+
+    // CHART 1: bump plot ranking
+    function renderRankChart(data) {
+      const canvas = document.getElementById('chart-rank'); if (!canvas) return;
+      const nPos = Math.max(1, parseInt(document.getElementById('rank-positions-n').value, 10) || 10);
+
+      const yearsSet = new Set();
+      const groupTotals = {};
+      const groupYear = {};
+      data.forEach(r => {
+        const y = getYear(rowDateField(r)); if (!y || y < MIN_YEAR) return;
+        const g = (r.group_name || '').trim(); if (!g) return;
+        yearsSet.add(y);
+        groupTotals[g] = (groupTotals[g] || 0) + 1;
+        groupYear[g] = groupYear[g] || {};
+        groupYear[g][y] = (groupYear[g][y] || 0) + 1;
+      });
+      const years = Array.from(yearsSet).sort((a, b) => a - b);
+      const yearRanks = {};
+      const visibleSet = new Set();
+      years.forEach(y => {
+        const list = Object.keys(groupYear).map(g => [g, groupYear[g][y] || 0]).filter(x => x[1] > 0);
+        list.sort((a, b) => b[1] - a[1]);
+        const ranks = {};
+        list.forEach(([g], i) => {
+          ranks[g] = i + 1;
+          if (i < nPos) visibleSet.add(g);
+        });
+        yearRanks[y] = ranks;
+      });
+      // Order visible groups by overall victim count (desc) for stable legend/colors
+      const topGroups = Array.from(visibleSet).sort((a, b) => (groupTotals[b] || 0) - (groupTotals[a] || 0));
+
+      const datasets = topGroups.map((g, i) => ({
+        label: g,
+        data: years.map(y => {
+          const r = yearRanks[y][g];
+          return (r && r <= nPos) ? r : null;
+        }),
+        borderColor: colorFor(i, topGroups.length),
+        backgroundColor: colorFor(i, topGroups.length),
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        spanGaps: false,
+        tension: 0.25,
+      }));
+
+      if (rankChart) rankChart.destroy();
+      rankChart = new Chart(canvas, {
+        type: 'line',
+        data: { labels: years.map(String), datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const g = ctx.dataset.label; const y = years[ctx.dataIndex];
+                  const rank = ctx.parsed.y; const count = (groupYear[g] && groupYear[g][y]) || 0;
+                  return `${g}: rank ${rank} (${count} victims)`;
+                }
+              }
+            }
+          },
+          interaction: { mode: 'nearest', intersect: false },
+          layout: { padding: { top: 24 } },
+          scales: {
+            x: { title: { display: true, text: 'Year' } },
+            y: {
+              reverse: true, min: 0.5, max: nPos + 0.5,
+              title: { display: true, text: 'Rank (1 = top)' },
+              ticks: { stepSize: 1, precision: 0, callback: (v) => (Number.isInteger(v) && v >= 1 && v <= nPos) ? v : '' }
+            }
+          }
+        }
+      });
+    }
+
+    // CHART 3: total victims per year (from 2020)
+    function renderTotalsChart(data) {
+      const canvas = document.getElementById('chart-totals'); if (!canvas) return;
+      const counts = {};
+      data.forEach(r => {
+        const y = getYear(rowDateField(r));
+        if (!y || y < MIN_YEAR) return;
+        counts[y] = (counts[y] || 0) + 1;
+      });
+      const years = Object.keys(counts).map(Number).sort((a, b) => a - b);
+      const values = years.map(y => counts[y]);
+      if (totalsChart) totalsChart.destroy();
+      totalsChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: years.map(String),
+          datasets: [{
+            label: 'Total victims',
+            data: values,
+            borderColor: '#0ea5e9',
+            backgroundColor: 'rgba(14,165,233,0.15)',
+            borderWidth: 2.5,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            fill: true,
+            tension: 0.25,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { title: { display: true, text: 'Year' } },
+            y: { beginAtZero: true, title: { display: true, text: 'Victims' }, ticks: { precision: 0 } }
+          }
+        }
+      });
+    }
+
+    // CHART 2: top 20 gruppi per anno selezionato
+    function renderYearChart(data, year) {
+      const canvas = document.getElementById('chart-year'); if (!canvas) return;
+      const counts = {};
+      data.forEach(r => {
+        const y = getYear(rowDateField(r));
+        if (y !== year || y < MIN_YEAR) return;
+        const g = (r.group_name || '').trim(); if (!g) return;
+        counts[g] = (counts[g] || 0) + 1;
+      });
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 20);
+      const labels = top.map(x => x[0]);
+      const values = top.map(x => x[1]);
+
+      if (yearChart) yearChart.destroy();
+      yearChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: `Victims (${year})`,
+            data: values,
+            backgroundColor: 'rgba(99,102,241,0.7)',
+            borderColor: '#4f46e5',
+            borderWidth: 1,
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, title: { display: true, text: 'Victims' }, ticks: { precision: 0 } },
+            y: { ticks: { autoSkip: false, font: { size: 12 } } }
+          }
+        }
+      });
+    }
+
+    function setupYearSelect(data) {
+      const sel = document.getElementById('year-select'); if (!sel) return;
+      const years = Array.from(new Set(data.map(r => getYear(rowDateField(r))).filter(y => y && y >= MIN_YEAR))).sort((a, b) => a - b);
+      if (!years.length) { sel.innerHTML = ''; return; }
+      const current = new Date().getFullYear();
+      const def = years.includes(current) ? current : years[years.length - 1];
+      sel.innerHTML = years.map(y => `<option value="${y}"${y === def ? ' selected' : ''}>${y}</option>`).join('');
+      sel.onchange = () => renderYearChart(fullData, parseInt(sel.value, 10));
+      renderYearChart(data, def);
+    }
+
+    function syncTopScrollWidth() {
+      const spacer = document.getElementById('top-scroll-spacer');
+      const el = document.querySelector('#rw-table .tabulator-table');
+      if (spacer && el) spacer.style.width = el.scrollWidth + 'px';
+    }
+    function setupTopScroll() {
+      const top = document.getElementById('top-scroll');
+      const holder = document.querySelector('#rw-table .tabulator-tableholder');
+      if (!top || !holder) return;
+      top.addEventListener('scroll', () => holder.scrollLeft = top.scrollLeft);
+      holder.addEventListener('scroll', () => top.scrollLeft = holder.scrollLeft);
+      syncTopScrollWidth();
+      top.style.display = 'block';
+      if (window.ResizeObserver) {
+        const el = document.querySelector('#rw-table .tabulator-table');
+        if (el) new ResizeObserver(syncTopScrollWidth).observe(el);
+      }
+      window.addEventListener('resize', syncTopScrollWidth);
+    }
+
+    function buildTable(data) {
+      table = new Tabulator('#rw-table', {
+        data, layout: 'fitData', pagination: true, paginationSize: 300, movableColumns: true,
+        initialSort: [{ column: 'discovered', dir: 'desc' }],
+        columnDefaults: { resizable: true, minWidth: 140 },
+        columns: [
+          { title: 'Post Title', field: 'post_title', width: 260 },
+          { title: 'Group', field: 'group_name', width: 140 },
+          { title: 'Discovered', field: 'discovered', width: 180 },
+          { title: 'Description', field: 'description', width: 320 },
+          { title: 'Published', field: 'published', width: 180 },
+          { title: 'Post URL', field: 'post_url', width: 300, formatter: (cell) => { const v = cell.getValue(); return v ? `<a href="${v}" target="_blank" style="color:#6366f1;">link</a>` : '-'; } },
+          { title: 'Country', field: 'country', width: 120 },
+          { title: 'Activity', field: 'activity', width: 140 },
+          { title: 'Website', field: 'website', width: 220, formatter: (cell) => { const v = cell.getValue(); return v ? `<a href="https://${v}" target="_blank" style="color:#6366f1;">${v}</a>` : '-'; } },
+          { title: 'Duplicates', field: 'duplicates', width: 140 },
+        ],
+      });
+      table.on('tableBuilt', () => { setupTopScroll(); updateStats(table.getData()); });
+      table.on('dataFiltered', (_, rows) => updateStats(rows.map(r => r.getData())));
+      table.on('columnResized', syncTopScrollWidth);
+      table.on('columnMoved', syncTopScrollWidth);
+      table.on('renderComplete', syncTopScrollWidth);
+    }
+
+    function applyFilters() {
+      const title = document.getElementById('flt-title').value.trim().toLowerCase();
+      const group = document.getElementById('flt-group').value.trim().toLowerCase();
+      const country = document.getElementById('flt-country').value.trim().toLowerCase();
+      const activity = document.getElementById('flt-activity').value.trim().toLowerCase();
+      const website = document.getElementById('flt-website').value.trim().toLowerCase();
+      const fromVal = document.getElementById('flt-date-from').value;
+      const toVal = document.getElementById('flt-date-to').value;
+      const fromDate = fromVal ? new Date(fromVal) : null;
+      const toDate = toVal ? new Date(toVal) : null;
+      if (toDate) toDate.setHours(23, 59, 59, 999);
+      table.setFilter((row) => {
+        const dDate = parseDate(row.discovered);
+        if (title && !String(row.post_title || '').toLowerCase().includes(title)) return false;
+        if (group && !String(row.group_name || '').toLowerCase().includes(group)) return false;
+        if (country && !String(row.country || '').toLowerCase().includes(country)) return false;
+        if (activity && !String(row.activity || '').toLowerCase().includes(activity)) return false;
+        if (website && !String(row.website || '').toLowerCase().includes(website)) return false;
+        if (fromDate && (!dDate || dDate < fromDate)) return false;
+        if (toDate && (!dDate || dDate > toDate)) return false;
+        return true;
+      });
+    }
+    function attachFilterHandlers() {
+      ['flt-title', 'flt-group', 'flt-country', 'flt-activity', 'flt-website', 'flt-date-from', 'flt-date-to'].forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener('input', applyFilters);
+        if (id.startsWith('flt-date')) el.addEventListener('change', applyFilters);
+      });
+      document.getElementById('btn-reset').addEventListener('click', () => {
+        ['flt-title', 'flt-group', 'flt-country', 'flt-activity', 'flt-website', 'flt-date-from', 'flt-date-to'].forEach(id => document.getElementById(id).value = '');
+        table.clearFilter();
+        updateStats(table.getData());
+      });
+      document.getElementById('btn-export').addEventListener('click', () => {
+        const visibleCols = table.getColumns().filter(c => c.isVisible && c.isVisible()).map(c => c.getField()).filter(Boolean);
+        table.download('csv', 'ransomware_live_filtered.csv', { columns: visibleCols, rowRange: 'active' });
+      });
+    }
+    function attachUpdateHandler() {
+      const btn = document.getElementById('btn-update'); if (!btn) return;
+      btn.addEventListener('click', async () => {
+        btn.disabled = true; const original = btn.textContent; btn.textContent = 'Updating...';
+        try {
+          const res = await fetch('/api/ransomware_live/refresh', { method: 'POST' });
+          const payload = await res.json();
+          if (!res.ok) { alert(payload.error || 'Update failed'); return; }
+          await loadData();
+          setLastUpdate(payload.updated_at || payload.updated_at_human);
+        } catch (err) { alert('Update failed: ' + err); }
+        finally { btn.disabled = false; btn.textContent = original; }
+      });
+    }
+    function attachRankControls() {
+      document.getElementById('rank-apply').addEventListener('click', () => renderRankChart(fullData));
+      document.getElementById('rank-positions-n').addEventListener('change', () => renderRankChart(fullData));
+    }
+
+    async function loadData() {
+      try {
+        const res = await fetch('/api/ransomware_live');
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          document.getElementById('rw-table').innerHTML = '<div style="color:#dc2626; padding:18px;">' + (data.error || 'Error loading data') + '</div>';
+          return;
+        }
+        fullData = Array.isArray(data) ? data : [];
+        if (!table) {
+          buildTable(fullData);
+          attachFilterHandlers();
+          attachUpdateHandler();
+          attachRankControls();
+        } else {
+          table.replaceData(fullData);
+          updateStats(table.getData());
+        }
+        renderRankChart(fullData);
+        setupYearSelect(fullData);
+        renderTotalsChart(fullData);
+      } catch (err) {
+        document.getElementById('rw-table').innerHTML = '<div style="color:#dc2626; padding:18px;">Fetch error: ' + err + '</div>';
+      }
+    }
+
+    async function init() { await loadData(); await fetchLastUpdate(); }
     document.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
