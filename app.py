@@ -749,6 +749,8 @@ def get_ransomware_live():
                     escapechar='\\',
                 )
         df.columns = [c.strip() for c in df.columns]
+        # Drop the heavy 'description' column to keep the payload small and fast.
+        df = df.drop(columns=[c for c in df.columns if c.lower() == 'description'], errors='ignore')
         # Replace empty strings with NaN then with None
         df = df.replace({'': None})
         df = df.replace([float('inf'), -float('inf')], pd.NA).where(pd.notnull(df), None)
@@ -842,6 +844,19 @@ def refresh_ransomware_live():
             shutil.copyfileobj(resp, out)
         if os.path.getsize(tmp_path) == 0:
             raise RuntimeError('downloaded file is empty')
+        # Strip the heavy 'description' column before persisting so the page
+        # loads fast. Use tolerant parsing (upstream often has unescaped quotes).
+        try:
+            try:
+                _df = pd.read_csv(tmp_path)
+            except Exception:
+                _df = pd.read_csv(tmp_path, engine='python', on_bad_lines='skip')
+            _df.columns = [c.strip() for c in _df.columns]
+            _df = _df.drop(columns=[c for c in _df.columns if c.lower() == 'description'], errors='ignore')
+            _df.to_csv(tmp_path, index=False)
+        except Exception:
+            # If post-processing fails, keep the raw download rather than failing.
+            pass
         os.replace(tmp_path, dest_path)
     except Exception as e:
         try:
@@ -2359,7 +2374,7 @@ def http_archive_muni_tech_reduced_timeline_page(domain):
 @app.route('/api/municipalities/muni_revised_oliver')
 def get_muni_revised_oliver():
     try:
-        path = os.path.join(app.root_path, 'data', 'municipalities', 'ransomware_live_municipalities_oliver.csv')
+        path = os.path.join(app.root_path, 'data', 'municipalities', 'municipalities_complete.csv')
         if not os.path.exists(path):
             return jsonify({'error': f'File not found: {path}'}), 404
         df = pd.read_csv(path)
@@ -2372,7 +2387,7 @@ def get_muni_revised_oliver():
         # Clean booleans / normalize 'TRUE'/'FALSE' textual (keep original column name)
         gov_col = None
         for c in df.columns:
-            if c.lower().startswith('goverment service'):  # matches "Goverment Service?"
+            if c.lower().replace('_', ' ').strip().startswith('goverment service'):  # matches "goverment_service" / "Goverment Service?"
                 gov_col = c
                 # Normalize values to capitalized True/False strings
                 df[c] = df[c].apply(lambda v: None if (pd.isna(v) or str(v).strip()=='' ) else ('True' if str(v).strip().upper() in {'TRUE','T','YES','Y','1'} else ('False' if str(v).strip().upper() in {'FALSE','F','NO','N','0'} else str(v))))

@@ -14,6 +14,8 @@
     .chart-card { margin:8px 0 18px; padding:14px 16px; border:1px solid #e2e8f0; border-radius:14px; background:#f8fafc; }
     .chart-header { font-weight:600; font-size:15px; margin-bottom:8px; color:#0f172a; }
     .chart-body { position:relative; height:220px; }
+    .charts-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:14px; margin:8px 0 18px; }
+    .charts-grid .chart-card { margin:0; }
     #year-chart-placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:14px; }
     .filters { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
     .filter-input { padding:10px 12px; border:1px solid #d1d5db; border-radius:8px; min-width:160px; font-size:14px; }
@@ -51,6 +53,24 @@
         <div class="chart-body">
           <canvas id="year-chart" aria-label="Ransom attacks per year" role="img"></canvas>
           <div id="year-chart-placeholder">No year data available</div>
+        </div>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-header">Hacked vs Not hacked</div>
+          <div class="chart-body"><canvas id="hacked-chart" aria-label="Hacked distribution" role="img"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">Top ransomware groups</div>
+          <div class="chart-body"><canvas id="group-chart" aria-label="Top ransomware groups" role="img"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">Top states</div>
+          <div class="chart-body"><canvas id="state-chart" aria-label="Top states" role="img"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">Top activity sectors</div>
+          <div class="chart-body"><canvas id="activity-chart" aria-label="Top activity sectors" role="img"></canvas></div>
         </div>
       </div>
       <div class="stats" id="stats-bar">
@@ -95,6 +115,39 @@
   <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
   <script>
     let table; let fullPayload=null; let govColumn=null; let yearChart=null;
+    let hackedChart=null, groupChart=null, stateChart=null, activityChart=null;
+    const PALETTE=['#6366f1','#0f766e','#64748b','#d97706','#9333ea','#0891b2','#475569','#65a30d','#be123c','#2563eb'];
+    function topCounts(map, n){
+      return Object.entries(map).filter(e=>e[0] && e[0]!=='null' && e[0]!=='undefined')
+        .sort((a,b)=>b[1]-a[1]).slice(0,n);
+    }
+    function renderDoughnut(ref, canvasId, labels, data, colors){
+      const canvas=document.getElementById(canvasId);
+      if(!canvas) return ref;
+      if(!ref){
+        return new Chart(canvas,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:colors,borderColor:'#fff',borderWidth:1.5}]},options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:11}}}}}});
+      }
+      ref.data.labels=labels; ref.data.datasets[0].data=data; ref.data.datasets[0].backgroundColor=colors; ref.update();
+      return ref;
+    }
+    function renderHBar(ref, canvasId, labels, data, color){
+      const canvas=document.getElementById(canvasId);
+      if(!canvas) return ref;
+      if(!ref){
+        return new Chart(canvas,{type:'bar',data:{labels,datasets:[{data,backgroundColor:color+'73',borderColor:color,borderWidth:1.5,borderRadius:5}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{precision:0}}}}});
+      }
+      ref.data.labels=labels; ref.data.datasets[0].data=data; ref.update();
+      return ref;
+    }
+    function renderVBar(ref, canvasId, labels, data, color){
+      const canvas=document.getElementById(canvasId);
+      if(!canvas) return ref;
+      if(!ref){
+        return new Chart(canvas,{type:'bar',data:{labels,datasets:[{data,backgroundColor:color+'73',borderColor:color,borderWidth:1.5,borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+      }
+      ref.data.labels=labels; ref.data.datasets[0].data=data; ref.update();
+      return ref;
+    }
     function getYear(val){
       if(val===null||val===undefined) return null;
       if(typeof val==='number' && val>1900 && val<2100) return Math.floor(val);
@@ -122,7 +175,7 @@
     }
     function syncTopScrollWidth(){ const spacer=document.getElementById('top-scroll-spacer'); const el=document.querySelector('#muni-table .tabulator-table'); if(spacer&&el) spacer.style.width=el.scrollWidth+'px'; }
     function setupTopScroll(){ const top=document.getElementById('top-scroll'); const holder=document.querySelector('#muni-table .tabulator-tableholder'); if(!top||!holder) return; top.addEventListener('scroll',()=>holder.scrollLeft=top.scrollLeft); holder.addEventListener('scroll',()=>top.scrollLeft=holder.scrollLeft); syncTopScrollWidth(); top.style.display='block'; if(window.ResizeObserver){ const el=document.querySelector('#muni-table .tabulator-table'); if(el) new ResizeObserver(syncTopScrollWidth).observe(el);} window.addEventListener('resize',syncTopScrollWidth); }
-    function updateStats(filteredData){ if(!fullPayload) return; const total=filteredData.length; document.getElementById('stat-rows').textContent=total; if(!filteredData.length){ document.getElementById('stat-domains').textContent=0; document.getElementById('stat-gov-true').textContent=0; document.getElementById('stat-gov-false').textContent=0; document.getElementById('stat-hacked-yes').textContent=0; document.getElementById('stat-hacked-no').textContent=0; updateYearChart({}); return; }
+    function updateStats(filteredData){ if(!fullPayload) return; const total=filteredData.length; document.getElementById('stat-rows').textContent=total; if(!filteredData.length){ document.getElementById('stat-domains').textContent=0; document.getElementById('stat-gov-true').textContent=0; document.getElementById('stat-gov-false').textContent=0; document.getElementById('stat-hacked-yes').textContent=0; document.getElementById('stat-hacked-no').textContent=0; updateYearChart({}); updateExtraCharts([], 0, 0); return; }
       const domains=new Set(); let t=0,f=0; let hackedYes=0, hackedNo=0; const yearCounts={};
       filteredData.forEach(r=>{
         const d=r.domain_name || r.website || r.Link || r.link;
@@ -130,8 +183,8 @@
         if(govColumn && r[govColumn]==='True') t++; else if(govColumn && r[govColumn]==='False') f++;
         const hvRaw = r.hacked;
         let isHackedYes = false; let isHackedNo = false;
-        if(hvRaw === 1 || hvRaw === 1.0) { isHackedYes = true; }
-        else if(hvRaw === 0 || hvRaw === 0.0) { isHackedNo = true; }
+        if(hvRaw === 1 || hvRaw === 1.0 || hvRaw === true) { isHackedYes = true; }
+        else if(hvRaw === 0 || hvRaw === 0.0 || hvRaw === false) { isHackedNo = true; }
         else if(typeof hvRaw === 'string'){
           const hackedVal = hvRaw.trim().toLowerCase();
           if(hackedVal === '1' || hackedVal === 'true') isHackedYes = true;
@@ -141,7 +194,24 @@
         const year = getYear(r.published || r.start_date || r.discovered || r.date || r.event_date);
         if(year){ yearCounts[year]=(yearCounts[year]||0)+1; }
       });
-      document.getElementById('stat-domains').textContent=domains.size; document.getElementById('stat-gov-true').textContent=t; document.getElementById('stat-gov-false').textContent=f; document.getElementById('stat-hacked-yes').textContent=hackedYes; document.getElementById('stat-hacked-no').textContent=hackedNo; updateYearChart(yearCounts); }
+      document.getElementById('stat-domains').textContent=domains.size; document.getElementById('stat-gov-true').textContent=t; document.getElementById('stat-gov-false').textContent=f; document.getElementById('stat-hacked-yes').textContent=hackedYes; document.getElementById('stat-hacked-no').textContent=hackedNo; updateYearChart(yearCounts); updateExtraCharts(filteredData, hackedYes, hackedNo); }
+    function updateExtraCharts(rows, hackedYes, hackedNo){
+      // Hacked doughnut
+      hackedChart=renderDoughnut(hackedChart,'hacked-chart',['Hacked','Not hacked'],[hackedYes,hackedNo],['#be123c','#0f766e']);
+      // Top groups
+      const groups={}; const states={}; const acts={};
+      rows.forEach(r=>{
+        const g=r.group_name; if(g){ const k=String(g).trim(); if(k) groups[k]=(groups[k]||0)+1; }
+        const s=r.state; if(s){ const k=String(s).trim(); if(k) states[k]=(states[k]||0)+1; }
+        const a=r.activity; if(a){ const k=String(a).trim(); if(k) acts[k]=(acts[k]||0)+1; }
+      });
+      const gTop=topCounts(groups,10);
+      groupChart=renderHBar(groupChart,'group-chart',gTop.map(e=>e[0]),gTop.map(e=>e[1]),'#6366f1');
+      const sTop=topCounts(states,10);
+      stateChart=renderVBar(stateChart,'state-chart',sTop.map(e=>e[0]),sTop.map(e=>e[1]),'#0891b2');
+      const aTop=topCounts(acts,8);
+      activityChart=renderDoughnut(activityChart,'activity-chart',aTop.map(e=>e[0]),aTop.map(e=>e[1]),aTop.map((_,i)=>PALETTE[i%PALETTE.length]));
+    }
   function buildColumns(cols){ return cols.map(c=>{ if(c.toLowerCase()==='website') return {title:'Website', field:c, width:220, formatter:(cell)=>{ const v=cell.getValue(); if(!v) return '-'; const url=v.startsWith('http')?v:`https://${v}`; return `<a href="${url}" target="_blank" style="color:#6366f1;">${v}</a>`; }}; if(c.toLowerCase()==='link') return {title:'Domain Name', field:c, width:280, formatter:(cell)=>{ const v=cell.getValue(); if(!v) return '-'; const safe=v.replace(/"/g,'&quot;'); return `<a href="${v}" target="_blank" style="color:#6366f1; text-decoration:underline;">${safe}</a>`; }}; if(c.toLowerCase()==='post_title') return {title:'Post Title', field:c, width:260}; return {title:c, field:c, width:160}; }); }
     function buildTable(payload){ const data=payload.data||[]; govColumn=payload.stats && payload.stats.government_service_column; const cols=buildColumns(payload.columns||Object.keys(data[0]||{})); table=new Tabulator('#muni-table',{ data, layout:'fitData', pagination:true, paginationSize:300, movableColumns:true, initialSort:[], columnDefaults:{resizable:true,minWidth:140}, columns:cols }); table.on('tableBuilt',()=>{ setupTopScroll(); updateStats(table.getData()); }); table.on('dataFiltered',(_,rows)=> updateStats(rows.map(r=>r.getData()))); table.on('columnResized',syncTopScrollWidth); table.on('columnMoved',syncTopScrollWidth); table.on('renderComplete',syncTopScrollWidth); }
     function applyFilters(){

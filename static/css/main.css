@@ -77,8 +77,7 @@ body::before {
   width: 42px;
   height: 42px;
   border-radius: 14px;
-  background: linear-gradient(135deg,#e0e7ff, #c7d2fe);
-  box-shadow: 0 10px 25px rgba(79,70,229,0.24);
+  background: #e0e7ff;
   font-size: 1.3rem;
   color: #312e81;
 }

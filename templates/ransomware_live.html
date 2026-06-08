@@ -87,6 +87,7 @@
         <div class="stat">Groups<br><strong id="stat-groups">0</strong></div>
         <div class="stat">Countries<br><strong id="stat-countries">0</strong></div>
         <div class="stat">Activities<br><strong id="stat-activities">0</strong></div>
+        <div class="stat">Websites<br><strong id="stat-websites">0</strong></div>
         <div class="stat">Date Range<br><strong id="stat-range">-</strong></div>
       </div>
 
@@ -144,6 +145,7 @@
       document.getElementById('stat-groups').textContent = new Set(data.map(r => r.group_name).filter(Boolean)).size;
       document.getElementById('stat-countries').textContent = new Set(data.map(r => r.country).filter(Boolean)).size;
       document.getElementById('stat-activities').textContent = new Set(data.map(r => r.activity).filter(Boolean)).size;
+      document.getElementById('stat-websites').textContent = new Set(data.map(r => r.website).filter(Boolean)).size;
       const dates = data.map(r => parseDate(r.discovered)).filter(Boolean).sort((a, b) => a - b);
       document.getElementById('stat-range').textContent = dates.length
         ? dates[0].toISOString().split('T')[0] + ' → ' + dates[dates.length - 1].toISOString().split('T')[0]
@@ -314,8 +316,21 @@
       const current = new Date().getFullYear();
       const def = years.includes(current) ? current : years[years.length - 1];
       sel.innerHTML = years.map(y => `<option value="${y}"${y === def ? ' selected' : ''}>${y}</option>`).join('');
-      sel.onchange = () => renderYearChart(fullData, parseInt(sel.value, 10));
+      sel.onchange = () => renderYearChart(getActiveData(), parseInt(sel.value, 10));
       renderYearChart(data, def);
+    }
+
+    function getActiveData() {
+      if (table && typeof table.getData === 'function') {
+        try { return table.getData('active'); } catch (e) { return fullData; }
+      }
+      return fullData;
+    }
+    function renderAllCharts(data) {
+      renderRankChart(data);
+      renderTotalsChart(data);
+      const sel = document.getElementById('year-select');
+      if (sel && sel.value) renderYearChart(data, parseInt(sel.value, 10));
     }
 
     function syncTopScrollWidth() {
@@ -347,7 +362,6 @@
           { title: 'Post Title', field: 'post_title', width: 260 },
           { title: 'Group', field: 'group_name', width: 140 },
           { title: 'Discovered', field: 'discovered', width: 180 },
-          { title: 'Description', field: 'description', width: 320 },
           { title: 'Published', field: 'published', width: 180 },
           { title: 'Post URL', field: 'post_url', width: 300, formatter: (cell) => { const v = cell.getValue(); return v ? `<a href="${v}" target="_blank" style="color:#6366f1;">link</a>` : '-'; } },
           { title: 'Country', field: 'country', width: 120 },
@@ -357,7 +371,11 @@
         ],
       });
       table.on('tableBuilt', () => { setupTopScroll(); updateStats(table.getData()); });
-      table.on('dataFiltered', (_, rows) => updateStats(rows.map(r => r.getData())));
+      table.on('dataFiltered', (_, rows) => {
+        const active = rows.map(r => r.getData());
+        updateStats(active);
+        renderAllCharts(active);
+      });
       table.on('columnResized', syncTopScrollWidth);
       table.on('columnMoved', syncTopScrollWidth);
       table.on('renderComplete', syncTopScrollWidth);
@@ -396,6 +414,7 @@
         ['flt-title', 'flt-group', 'flt-country', 'flt-activity', 'flt-website', 'flt-date-from', 'flt-date-to'].forEach(id => document.getElementById(id).value = '');
         table.clearFilter();
         updateStats(table.getData());
+        renderAllCharts(table.getData());
       });
       document.getElementById('btn-export').addEventListener('click', () => {
         const visibleCols = table.getColumns().filter(c => c.isVisible && c.isVisible()).map(c => c.getField()).filter(Boolean);
@@ -417,8 +436,8 @@
       });
     }
     function attachRankControls() {
-      document.getElementById('rank-apply').addEventListener('click', () => renderRankChart(fullData));
-      document.getElementById('rank-positions-n').addEventListener('change', () => renderRankChart(fullData));
+      document.getElementById('rank-apply').addEventListener('click', () => renderRankChart(getActiveData()));
+      document.getElementById('rank-positions-n').addEventListener('change', () => renderRankChart(getActiveData()));
     }
 
     async function loadData() {

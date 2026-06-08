@@ -1,22 +1,21 @@
 <nav class="navbar navbar-expand-lg navbar-light glass-nav sticky-top" style="background-color: #ffffff;">
   <style>
     .navbar .container-fluid { display:flex; align-items:center; justify-content:space-between; }
-    .navbar #primaryNav { flex:1 1 auto; display:flex !important; justify-content:flex-end !important; }
-    .navbar #primaryNav .navbar-nav { margin-left:auto !important; }
+    .navbar #primaryNav { flex:1 1 auto; display:flex !important; justify-content:flex-start !important; }
+    .navbar #primaryNav .navbar-nav { margin-left:0 !important; margin-right:auto !important; }
   </style>
   <div class="container-fluid">
     <a class="navbar-brand d-flex align-items-center gap-3" href="/">
       <span class="nav-gradient-icon"><i class="bi bi-shield-lock-fill"></i></span>
       <span>
         Ransomware Atlas
-        <small class="d-none d-xl-block fw-normal opacity-75">Multi-source breach intelligence</small>
       </span>
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
-    <div class="collapse navbar-collapse justify-content-end ms-auto" id="primaryNav">
-      <ul class="navbar-nav ms-auto align-items-lg-center mb-2 mb-lg-0 gap-lg-1">
+    <div class="collapse navbar-collapse" id="primaryNav">
+      <ul class="navbar-nav me-auto align-items-lg-center mb-2 mb-lg-0 gap-lg-1">
         <li class="nav-item"><a class="nav-link" href="/home" data-path="/home">Home</a></li>
         <li class="nav-item"><a class="nav-link" href="/intro" data-path="/intro">Intro</a></li>
         <!-- <li class="nav-item"><a class="nav-link" href="/" data-path="/">Victims Explorer</a></li>
