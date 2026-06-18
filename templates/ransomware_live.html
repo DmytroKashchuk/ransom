@@ -427,8 +427,23 @@
         btn.disabled = true; const original = btn.textContent; btn.textContent = 'Updating...';
         try {
           const res = await fetch('/api/ransomware_live/refresh', { method: 'POST' });
-          const payload = await res.json();
-          if (!res.ok) { alert(payload.error || 'Update failed'); return; }
+          const raw = await res.text();
+          let payload = null;
+          try { payload = JSON.parse(raw); } catch (_) { /* non-JSON (HTML error page) */ }
+          if (!payload) {
+            // The server returned HTML instead of JSON (proxy timeout, 404, or 5xx).
+            let msg;
+            if (res.status === 404) {
+              msg = 'Update endpoint not found (HTTP 404). The server is likely running an older version of the app — redeploy app.py.';
+            } else if (res.status === 502 || res.status === 503 || res.status === 504) {
+              msg = 'The update timed out on the server (HTTP ' + res.status + '). The download is large; increase the gunicorn/nginx timeout, then retry.';
+            } else {
+              msg = 'Update failed: server returned a non-JSON response (HTTP ' + res.status + ').';
+            }
+            alert(msg);
+            return;
+          }
+          if (!res.ok) { alert(payload.error || 'Update failed (HTTP ' + res.status + ').'); return; }
           await loadData();
           setLastUpdate(payload.updated_at || payload.updated_at_human);
         } catch (err) { alert('Update failed: ' + err); }
