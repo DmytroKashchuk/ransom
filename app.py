@@ -826,62 +826,75 @@ def ransomware_live_last_updated():
 
 @app.route('/api/ransomware_live/refresh', methods=['POST'])
 def refresh_ransomware_live():
-    # Write to the same file the page reads from. If neither exists yet,
-    # default to the canonical (non-typo) name.
-    dest_path = _ransomware_live_path() or os.path.join(app.root_path, 'data', 'ransomware_live.csv')
-    data_dir = os.path.dirname(dest_path)
+    # Whole body guarded so the endpoint ALWAYS returns JSON (never an HTML 500),
+    # and surfaces the real error to the client for diagnosis.
+    tmp_path = None
     try:
-        os.makedirs(data_dir, exist_ok=True)
-    except Exception as e:
-        return jsonify({'error': f'Cannot create data directory {data_dir}: {e}'}), 500
+        # Write to the same file the page reads from. If neither exists yet,
+        # default to the canonical (non-typo) name.
+        dest_path = _ransomware_live_path() or os.path.join(app.root_path, 'data', 'ransomware_live.csv')
+        data_dir = os.path.dirname(dest_path)
+        try:
+            os.makedirs(data_dir, exist_ok=True)
+        except Exception as e:
+            return jsonify({'error': f'Cannot create data directory {data_dir}: {e}'}), 500
 
-    # Download with stdlib (no dependency on the `curl` binary being present on the server).
-    tmp_fd, tmp_path = tempfile.mkstemp(prefix='rwlive_', suffix='.csv', dir=data_dir)
-    os.close(tmp_fd)
-    try:
-        req = urllib.request.Request(RANSOMWARE_LIVE_URL, headers={'User-Agent': 'ransom-webapp/1.0'})
-        with urllib.request.urlopen(req, timeout=120) as resp, open(tmp_path, 'wb') as out:
-            shutil.copyfileobj(resp, out)
-        if os.path.getsize(tmp_path) == 0:
-            raise RuntimeError('downloaded file is empty')
-        # Strip the heavy 'description' column before persisting so the page
-        # loads fast. Use tolerant parsing (upstream often has unescaped quotes).
+        if not os.access(data_dir, os.W_OK):
+            return jsonify({'error': f'Data directory is not writable: {data_dir}'}), 500
+
+        # Download with stdlib (no dependency on the `curl` binary being present on the server).
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix='rwlive_', suffix='.csv', dir=data_dir)
+        os.close(tmp_fd)
         try:
+            req = urllib.request.Request(RANSOMWARE_LIVE_URL, headers={'User-Agent': 'ransom-webapp/1.0'})
+            with urllib.request.urlopen(req, timeout=120) as resp, open(tmp_path, 'wb') as out:
+                shutil.copyfileobj(resp, out)
+            if os.path.getsize(tmp_path) == 0:
+                raise RuntimeError('downloaded file is empty')
+            # Strip the heavy 'description' column before persisting so the page
+            # loads fast. Use tolerant parsing (upstream often has unescaped quotes).
             try:
-                _df = pd.read_csv(tmp_path)
+                try:
+                    _df = pd.read_csv(tmp_path)
+                except Exception:
+                    _df = pd.read_csv(tmp_path, engine='python', on_bad_lines='skip')
+                _df.columns = [c.strip() for c in _df.columns]
+                _df = _df.drop(columns=[c for c in _df.columns if c.lower() == 'description'], errors='ignore')
+                _df.to_csv(tmp_path, index=False)
             except Exception:
-                _df = pd.read_csv(tmp_path, engine='python', on_bad_lines='skip')
-            _df.columns = [c.strip() for c in _df.columns]
-            _df = _df.drop(columns=[c for c in _df.columns if c.lower() == 'description'], errors='ignore')
-            _df.to_csv(tmp_path, index=False)
-        except Exception:
-            # If post-processing fails, keep the raw download rather than failing.
-            pass
-        os.replace(tmp_path, dest_path)
-    except Exception as e:
+                # If post-processing fails, keep the raw download rather than failing.
+                pass
+            os.replace(tmp_path, dest_path)
+            tmp_path = None  # moved successfully
+        except Exception as e:
+            return jsonify({'error': f'Download failed: {e}', 'url': RANSOMWARE_LIVE_URL, 'dest': dest_path}), 500
+
+        if not os.path.exists(dest_path):
+            return jsonify({'error': 'Download reported success but file is missing'}), 500
+
+        updated_at = _file_mtime_iso(dest_path)
+        size = None
         try:
-            if os.path.exists(tmp_path):
+            size = os.path.getsize(dest_path)
+        except Exception:
+            pass
+
+        return jsonify({
+            'status': 'ok',
+            'path': os.path.relpath(dest_path, app.root_path),
+            'updated_at': updated_at,
+            'size_bytes': size,
+        })
+    except Exception as e:
+        import traceback
+        app.logger.error('refresh_ransomware_live failed: %s', traceback.format_exc())
+        return jsonify({'error': f'{type(e).__name__}: {e}'}), 500
+    finally:
+        try:
+            if tmp_path and os.path.exists(tmp_path):
                 os.remove(tmp_path)
         except Exception:
             pass
-        return jsonify({'error': f'Download failed: {e}', 'url': RANSOMWARE_LIVE_URL, 'dest': dest_path}), 500
-
-    if not os.path.exists(dest_path):
-        return jsonify({'error': 'Download reported success but file is missing'}), 500
-
-    updated_at = _file_mtime_iso(dest_path)
-    size = None
-    try:
-        size = os.path.getsize(dest_path)
-    except Exception:
-        pass
-
-    return jsonify({
-        'status': 'ok',
-        'path': os.path.relpath(dest_path, app.root_path),
-        'updated_at': updated_at,
-        'size_bytes': size,
-    })
 
 @app.route('/ransom_grained')
 def ransom_grained_page():
