@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect, url_for
 from markupsafe import Markup
 from datetime import datetime
 import os, json, math, subprocess, ast, re, urllib.request, tempfile, shutil
@@ -33,7 +33,7 @@ def _build_dataset_catalog():
             'each record is one public claim by a ransomware group (group, victim, discovery/publish dates, country, activity).',
             'incidents'),
         _ds('Temple University Ransomware DB',
-            'https://sites.temple.edu/care/ci-rw-attacks/',
+            'https://sites.temple.edu/care/cira/',
             os.path.join('data', 'temple_db.csv'),
             '/temple',
             'Curated dataset of ransomware attacks against critical infrastructure with strain, sector, '
@@ -123,6 +123,58 @@ def _build_dataset_catalog():
 DATASETS = _build_dataset_catalog()
 
 
+# Extra presentation metadata for the /home table (nice source links + originating papers).
+# Keyed by dataset name; merged into the catalog entries above.
+_DATASET_EXTRAS = {
+    'Ransomware.live Victims': {
+        'source_url': 'https://ransomware.live/',
+        'source_label': 'ransomware.live',
+    },
+    'Temple University Ransomware DB': {
+        'source_url': 'https://sites.temple.edu/care/cira/',
+        'source_label': 'sites.temple.edu (CIRA)',
+    },
+    'Ransom Grained DB': {
+        'source_url': 'https://zenodo.org/records/15571866',
+        'source_label': 'Zenodo dataset',
+        'paper': {
+            'title': 'The Ransomware Decade: The Creation of a Fine-Grained Dataset and a Longitudinal Study',
+            'url': 'https://www.usenix.org/system/files/usenixsecurity25-sarabi.pdf',
+        },
+    },
+    'Maryland Cyber Events': {
+        'source_url': 'https://cissm.umd.edu/cyber-events-database',
+        'source_label': 'cissm.umd.edu',
+    },
+    'VERIS Community Database': {
+        'source_url': 'https://verisframework.org/vcdb.html',
+        'source_label': 'verisframework.org',
+    },
+    'EuRepoC Cyber Incidents': {
+        'source_url': 'https://eurepoc.eu/table-view/',
+        'source_label': 'eurepoc.eu',
+    },
+    'SEC 8-K Filings': {
+        'source_url': 'https://www.sec.gov/edgar',
+        'source_label': 'sec.gov/edgar',
+    },
+    'SEC 10-K Master Records': {
+        'source_url': 'https://doi.org/10.6084/m9.figshare.28789001',
+        'source_label': 'figshare dataset',
+        'paper': {
+            'title': 'How Informative are Cybersecurity Risk Disclosures? Empirical Analysis of Breached Firms',
+            'url': 'https://doi.org/10.6084/m9.figshare.28789001',
+        },
+    },
+}
+
+for _d in DATASETS:
+    _extra = _DATASET_EXTRAS.get(_d['name'])
+    if _extra:
+        _d.update(_extra)
+
+
+
 def _resolve_dataset_path(d):
     """Resolve catalog entry path to an absolute path; handle the ransomware.live alternate filename."""
     if d['name'] == 'Ransomware.live Victims':
@@ -185,24 +237,7 @@ def _count_csv_records(path):
 # Intro page rendering README.md
 @app.route('/intro')
 def intro_page():
-    readme_path = os.path.join(app.root_path, 'README.md')
-    html_content = ''
-    try:
-        with open(readme_path, 'r', encoding='utf-8') as f:
-            md_text = f.read()
-            # Convert markdown to HTML (safe mode removed in modern markdown lib; we trust local file)
-            html_content = markdown.markdown(md_text, extensions=['extra', 'toc', 'tables', 'fenced_code'])
-    except Exception as e:
-        html_content = f"<p style='color:red;'>Failed to load README.md: {e}</p>"
-
-    incidents = [d for d in DATASETS if d['group'] == 'incidents']
-    enriched = [d for d in DATASETS if d['group'] == 'enriched']
-    return render_template(
-        'intro.html',
-        readme_html=Markup(html_content),
-        incidents=incidents,
-        enriched=enriched,
-    )
+    return redirect(url_for('home_page'))
 
 # Path to the CSV file
 CSV_PATH = 'data/ransomed_domains_in_swdb_with_accounts.csv'
@@ -354,7 +389,7 @@ def _safe_datetime(val):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return home_page()
 
 
 # Simple home page: lightweight summary of available datasets
@@ -371,8 +406,21 @@ def home_page():
         }
 
     incidents = [build(d) for d in DATASETS if d['group'] == 'incidents']
-    enriched = [build(d) for d in DATASETS if d['group'] == 'enriched']
-    return render_template('home.html', incidents=incidents, enriched=enriched)
+    rows = []
+    for d in incidents:
+        paper = d.get('paper') or {}
+        rows.append({
+            'name': d['name'],
+            'page': d['page'] if d['exists'] else None,
+            'source_url': d.get('source_url'),
+            'source_label': d.get('source_label') or d.get('source'),
+            'records': d['records'],
+            'updated_at': d['updated_at'][:19].replace('T', ' ') if d['updated_at'] else None,
+            'paper_title': paper.get('title'),
+            'paper_url': paper.get('url'),
+            'exists': d['exists'],
+        })
+    return render_template('home.html', rows=rows)
 
 
 def _ransomware_live_path():
@@ -402,7 +450,7 @@ def swdb_page():
 # New page: Unique SWDB Domains (aggregated)
 @app.route('/swdb_unique')
 def swdb_unique_page():
-    return render_template('swdb_unique.html')
+    return redirect(url_for('home_page'))
 
 
 @app.route('/swdb_preview_usa')

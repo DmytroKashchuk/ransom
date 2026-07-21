@@ -1,67 +1,106 @@
 {% extends 'base.html' %}
 {% block title %}Home – Ransomware Atlas{% endblock %}
 
+{% block extra_css %}
+<link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_simple.min.css" rel="stylesheet" />
+<style>
+  /* Larger, readable table on the home page (overrides the compact global rules) */
+  #datasets-table .tabulator-row { font-size: 15px; }
+  #datasets-table .tabulator-cell { padding: 14px 16px !important; line-height: 1.4; }
+  #datasets-table .tabulator-col { padding: 4px 8px; }
+  #datasets-table .tabulator-col-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #475569;
+  }
+  #datasets-table .tabulator-row:hover { background-color: #f8fafc; }
+
+  .home-header { border-bottom: 1px solid #e2e8f0; padding-bottom: 1.25rem; margin-bottom: 1.5rem; }
+  .home-header h1 { font-weight: 700; letter-spacing: -.01em; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container py-4">
-  <div class="mb-4">
-    <h1 class="h3 mb-1">Datasets Overview</h1>
-    <p class="text-muted mb-0">Summary of the ransomware datasets available</p>
+<div class="container-xl py-4">
+  <div class="home-header">
+    <h1 class="h2 mb-1">Ransomware Atlas</h1>
+    <p class="text-muted mb-0">Collection of ransomware incident datasets.</p>
   </div>
 
-  {% macro dataset_table(items) -%}
-  <div class="card shadow-sm border-0 mb-4">
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th scope="col">Dataset</th>
-            <th scope="col">Source</th>
-            <th scope="col" class="text-end">Records</th>
-            <th scope="col">Last Updated</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for d in items %}
-          <tr>
-            <td>
-              {% if d.exists %}
-                <a href="{{ d.page }}" class="fw-semibold text-decoration-none">{{ d.name }}</a>
-              {% else %}
-                <span class="fw-semibold text-muted">{{ d.name }}</span>
-                <span class="badge bg-warning text-dark ms-2">missing</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if d.source.startswith('http') %}
-                <a href="{{ d.source }}" target="_blank" rel="noopener" class="text-decoration-none">{{ d.source }}</a>
-              {% else %}
-                <span class="text-muted">{{ d.source }}</span>
-              {% endif %}
-            </td>
-            <td class="text-end font-monospace">
-              {% if d.records is not none %}{{ "{:,}".format(d.records) }}{% else %}—{% endif %}
-            </td>
-            <td class="text-muted">
-              {% if d.updated_at %}{{ d.updated_at[:19].replace('T', ' ') }}{% else %}—{% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  <div class="alert alert-light border" role="alert">
+    To explore <strong>all the databases</strong> at once, open
+    <a href="/all_databases" class="alert-link">All Databases</a> or
+    <a href="/detailed_databases" class="alert-link">Detailed Databases</a>.
   </div>
-  {%- endmacro %}
 
-  <h2 class="h5 mt-4 mb-2">Ransomware Incidents</h2>
-  <p class="text-muted small mb-2">Public datasets of ransomware.</p>
-  {{ dataset_table(incidents) }}
-
-  <h2 class="h5 mt-4 mb-2">Ransomware enriched with SWDB</h2>
-  <p class="text-muted small mb-2">Ransomware victims joined with the Spiceworks Web Database (SWDB).</p>
-  {{ dataset_table(enriched) }}
-
-  <p class="text-muted small mt-3 mb-0">
-    See <a href="/intro">Intro</a> for a short description of each dataset.
-  </p>
+  <h2 class="h5 mb-3">Datasets</h2>
+  <div id="datasets-table"></div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+<script>
+  const rows = {{ rows | tojson }};
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function datasetFormatter(cell) {
+    const d = cell.getData();
+    const name = escapeHtml(d.name);
+    if (d.page) {
+      return '<a href="' + escapeHtml(d.page) + '" class="fw-semibold text-decoration-none">' + name + '</a>';
+    }
+    return '<span class="fw-semibold text-muted">' + name +
+      '</span> <span class="badge bg-warning text-dark ms-1">missing</span>';
+  }
+
+  function sourceFormatter(cell) {
+    const d = cell.getData();
+    const label = escapeHtml(d.source_label || '');
+    if (d.source_url) {
+      return '<a href="' + escapeHtml(d.source_url) + '" target="_blank" rel="noopener" class="text-decoration-none">' + label + '</a>';
+    }
+    return '<span class="text-muted">' + label + '</span>';
+  }
+
+  function recordsFormatter(cell) {
+    const v = cell.getValue();
+    return (v == null) ? '—' : Number(v).toLocaleString();
+  }
+
+  function updatedFormatter(cell) {
+    const v = cell.getValue();
+    return v ? escapeHtml(v) : '<span class="text-muted">—</span>';
+  }
+
+  function notesFormatter(cell) {
+    const d = cell.getData();
+    if (d.paper_url) {
+      return '<a href="' + escapeHtml(d.paper_url) + '" target="_blank" rel="noopener" title="' +
+        escapeHtml(d.paper_title || '') + '">' + escapeHtml(d.paper_title || 'Paper') + '</a>';
+    }
+    return '<span class="text-muted">—</span>';
+  }
+
+  new Tabulator("#datasets-table", {
+    data: rows,
+    layout: "fitColumns",
+    placeholder: "No datasets available",
+    columnDefaults: { headerHozAlign: "left", headerSortTristate: true, vertAlign: "middle" },
+    columns: [
+      { title: "Dataset", field: "name", sorter: "string", formatter: datasetFormatter, widthGrow: 2, minWidth: 220 },
+      { title: "Source", field: "source_label", sorter: "string", formatter: sourceFormatter, widthGrow: 1.2, minWidth: 170 },
+      { title: "Records", field: "records", sorter: "number", hozAlign: "right", headerHozAlign: "right", formatter: recordsFormatter, width: 140 },
+      { title: "Last Updated", field: "updated_at", sorter: "string", formatter: updatedFormatter, width: 190 },
+      { title: "Notes", field: "paper_title", sorter: "string", formatter: notesFormatter, widthGrow: 2, minWidth: 240 },
+    ],
+  });
+</script>
 {% endblock %}
